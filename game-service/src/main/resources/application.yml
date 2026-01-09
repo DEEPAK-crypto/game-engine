@@ -27,6 +27,7 @@ spring:
     local-datacenter: datacenter1
     keyspace-name: game_platform
     schema-action: none
+    field-naming-strategy: org.springframework.data.mapping.model.SnakeCaseFieldNamingStrategy
 
   data:
     redis:
@@ -75,3 +76,4 @@ logging:
     com.gameplatform.game: DEBUG
     org.jooq: INFO
     org.springframework.data.cassandra: INFO
+    org.springframework.data.cassandra.core.cql: DEBUG

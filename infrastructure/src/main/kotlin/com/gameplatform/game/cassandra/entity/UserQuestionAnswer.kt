@@ -19,18 +19,18 @@ data class UserQuestionAnswer(
     @PrimaryKeyColumn(name = "question_id", ordinal = 2, type = PrimaryKeyType.CLUSTERED)
     val questionId: UUID,
 
-    @Column("turn_id")
+    @field:Column("turn_id")
     val turnId: UUID,
 
-    @Column("selected_option_id")
+    @field:Column("selected_option_id")
     val selectedOptionId: UUID,
 
-    @Column("is_correct")
+    @field:Column("is_correct")
     val isCorrect: Boolean,
 
-    @Column("reward_amount")
+    @field:Column("reward_amount")
     val rewardAmount: BigDecimal,
 
-    @Column("answered_at")
+    @field:Column("answered_at")
     val answeredAt: Instant
 )

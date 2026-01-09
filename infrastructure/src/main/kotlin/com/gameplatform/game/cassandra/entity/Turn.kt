@@ -23,21 +23,21 @@ data class Turn(
     @PrimaryKeyColumn(name = "server_sequence", ordinal = 3, type = PrimaryKeyType.CLUSTERED, ordering = Ordering.ASCENDING)
     val serverSequence: Long,
 
-    @Column("turn_id")
+    @field:Column("turn_id") // Add this to be explicit
     val turnId: UUID,
 
-    @Column("user_id")
+    @field:Column("user_id")
     val userId: UUID,
 
-    @Column("selected_option_id")
+    @field:Column("selected_option_id")
     val selectedOptionId: UUID,
 
-    @Column("is_correct")
+    @field:Column("is_correct")
     val isCorrect: Boolean,
 
-    @Column("reward_amount")
+    @field:Column("reward_amount")
     val rewardAmount: BigDecimal,
 
-    @Column("server_timestamp")
+    @field:Column("server_timestamp")
     val serverTimestamp: Instant
 )

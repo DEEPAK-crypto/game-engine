@@ -15,15 +15,15 @@ data class UserGameResult(
     @PrimaryKeyColumn(name = "game_id", ordinal = 1, type = PrimaryKeyType.CLUSTERED)
     val gameId: UUID,
 
-    @Column("total_reward")
+    @field:Column("total_reward")
     val totalReward: BigDecimal,
 
-    @Column("correct_answers")
+    @field:Column("correct_answers")
     val correctAnswers: Int,
 
-    @Column("total_questions")
+    @field:Column("total_questions")
     val totalQuestions: Int,
 
-    @Column("final_rank")
+    @field:Column("final_rank")
     val finalRank: Int
 )
