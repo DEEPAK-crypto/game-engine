@@ -48,7 +48,7 @@ flyway {
     user = dbUser
     password = dbPassword
     schemas = arrayOf("public")
-    locations = arrayOf("classpath:db/migration")
+    locations = arrayOf("filesystem:src/main/resources/db/migration")
     cleanDisabled = false
 }
 

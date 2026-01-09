@@ -1,3 +1,12 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("org.flywaydb:flyway-database-postgresql:10.4.1")
+    }
+}
+
 plugins {
     kotlin("jvm") version "2.0.21" apply false
     kotlin("plugin.spring") version "2.0.21" apply false
