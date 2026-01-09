@@ -41,14 +41,22 @@ USER1_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 USER2_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 USER3_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 USER4_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+USER5_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+USER6_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+USER7_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+USER8_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 
 log_section "Game Platform E2E Test"
 log_info "Testing against: $BASE_URL"
 log_info "Test Users:"
-log_info "  User 1 (Alice): $USER1_ID"
-log_info "  User 2 (Bob):   $USER2_ID"
-log_info "  User 3 (Carol): $USER3_ID"
-log_info "  User 4 (Dave):  $USER4_ID"
+log_info "  User 1 (Alice):   $USER1_ID"
+log_info "  User 2 (Bob):     $USER2_ID"
+log_info "  User 3 (Carol):   $USER3_ID"
+log_info "  User 4 (Dave):    $USER4_ID"
+log_info "  User 5 (Eve):     $USER5_ID"
+log_info "  User 6 (Frank):   $USER6_ID"
+log_info "  User 7 (Grace):   $USER7_ID"
+log_info "  User 8 (Henry):   $USER8_ID"
 
 # Step 1: Create a game
 log_section "Step 1: Creating Game"
@@ -57,8 +65,8 @@ CREATE_GAME_RESPONSE=$(curl -s -X POST "$API_BASE/games" \
     -d '{
         "name": "E2E Test Trivia Game",
         "gameType": "MCQ_FIFO",
-        "initialBudget": 1000.00,
-        "questionTimerSeconds": 30
+        "initialBudget": 2000.00,
+        "questionTimerSeconds": 15
     }')
 
 GAME_ID=$(echo "$CREATE_GAME_RESPONSE" | jq -r '.id')
@@ -80,7 +88,7 @@ ADD_QUESTIONS_RESPONSE=$(curl -s -X POST "$API_BASE/games/$GAME_ID/questions" \
             ],
             "correctOptionIndex": 0,
             "reward": 100.00,
-            "durationSeconds": 30
+            "durationSeconds": 15
         },
         {
             "questionText": "What is 2 + 2?",
@@ -92,7 +100,7 @@ ADD_QUESTIONS_RESPONSE=$(curl -s -X POST "$API_BASE/games/$GAME_ID/questions" \
             ],
             "correctOptionIndex": 1,
             "reward": 150.00,
-            "durationSeconds": 30
+            "durationSeconds": 15
         },
         {
             "questionText": "What color is the sky on a clear day?",
@@ -104,7 +112,31 @@ ADD_QUESTIONS_RESPONSE=$(curl -s -X POST "$API_BASE/games/$GAME_ID/questions" \
             ],
             "correctOptionIndex": 0,
             "reward": 200.00,
-            "durationSeconds": 30
+            "durationSeconds": 15
+        },
+        {
+            "questionText": "What is the largest planet in our solar system?",
+            "options": [
+                {"optionText": "Earth"},
+                {"optionText": "Mars"},
+                {"optionText": "Jupiter"},
+                {"optionText": "Saturn"}
+            ],
+            "correctOptionIndex": 2,
+            "reward": 250.00,
+            "durationSeconds": 15
+        },
+        {
+            "questionText": "How many continents are there?",
+            "options": [
+                {"optionText": "5"},
+                {"optionText": "6"},
+                {"optionText": "7"},
+                {"optionText": "8"}
+            ],
+            "correctOptionIndex": 2,
+            "reward": 300.00,
+            "durationSeconds": 15
         }
     ]')
 
@@ -114,14 +146,20 @@ log_success "Added $QUESTION_COUNT questions to the game"
 QUESTION1_ID=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[0].id')
 QUESTION2_ID=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[1].id')
 QUESTION3_ID=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[2].id')
+QUESTION4_ID=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[3].id')
+QUESTION5_ID=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[4].id')
 
 QUESTION1_CORRECT_OPTION=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[0].options[0].id')
 QUESTION2_CORRECT_OPTION=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[1].options[1].id')
 QUESTION3_CORRECT_OPTION=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[2].options[0].id')
+QUESTION4_CORRECT_OPTION=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[3].options[2].id')
+QUESTION5_CORRECT_OPTION=$(echo "$ADD_QUESTIONS_RESPONSE" | jq -r '.[4].options[2].id')
 
 log_info "Question 1 (Paris): $QUESTION1_ID"
 log_info "Question 2 (4): $QUESTION2_ID"
 log_info "Question 3 (Blue): $QUESTION3_ID"
+log_info "Question 4 (Jupiter): $QUESTION4_ID"
+log_info "Question 5 (7 continents): $QUESTION5_ID"
 
 # Step 3: Verify questions were added
 log_section "Step 3: Verifying Questions"
@@ -166,7 +204,7 @@ USER1_REWARD=$(echo "$USER1_ANSWER" | jq -r '.rewardAmount')
 USER1_RANK=$(echo "$USER1_ANSWER" | jq -r '.rank')
 log_success "User 1: isCorrect=$USER1_CORRECT, reward=$USER1_REWARD, rank=$USER1_RANK"
 
-sleep 0.5
+sleep 0.1
 
 # User 2 - Correct answer (should be 2nd, no reward)
 log_info "User 2 (Bob) submitting correct answer..."
@@ -182,7 +220,7 @@ USER2_REWARD=$(echo "$USER2_ANSWER" | jq -r '.rewardAmount')
 USER2_RANK=$(echo "$USER2_ANSWER" | jq -r '.rank')
 log_success "User 2: isCorrect=$USER2_CORRECT, reward=$USER2_REWARD, rank=$USER2_RANK"
 
-sleep 0.5
+sleep 0.1
 
 # User 3 - Wrong answer
 log_info "User 3 (Carol) submitting incorrect answer..."
@@ -199,7 +237,7 @@ USER3_REWARD=$(echo "$USER3_ANSWER" | jq -r '.rewardAmount')
 log_success "User 3: isCorrect=$USER3_CORRECT, reward=$USER3_REWARD"
 
 # User 4 - Correct answer (should be 3rd)
-sleep 0.5
+sleep 0.1
 log_info "User 4 (Dave) submitting correct answer..."
 USER4_ANSWER=$(curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
     -H "Content-Type: application/json" \
@@ -213,6 +251,29 @@ USER4_REWARD=$(echo "$USER4_ANSWER" | jq -r '.rewardAmount')
 USER4_RANK=$(echo "$USER4_ANSWER" | jq -r '.rank')
 log_success "User 4: isCorrect=$USER4_CORRECT, reward=$USER4_REWARD, rank=$USER4_RANK"
 
+# More users submitting answers for Question 1
+sleep 0.1
+log_info "User 5 (Eve) submitting correct answer..."
+USER5_ANSWER=$(curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER5_ID\",
+        \"selectedOptionId\": \"$QUESTION1_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }")
+log_success "User 5: rank=$(echo "$USER5_ANSWER" | jq -r '.rank')"
+
+sleep 0.1
+log_info "User 6 (Frank) submitting correct answer..."
+USER6_ANSWER=$(curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER6_ID\",
+        \"selectedOptionId\": \"$QUESTION1_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }")
+log_success "User 6: rank=$(echo "$USER6_ANSWER" | jq -r '.rank')"
+
 # Step 7: Check Question 1 Leaderboard
 log_section "Step 7: Checking Question 1 Leaderboard"
 Q1_LEADERBOARD=$(curl -s -X GET "$API_BASE/leaderboards/games/$GAME_ID/questions/$QUESTION1_ID?limit=10")
@@ -221,8 +282,8 @@ echo "$Q1_LEADERBOARD" | jq -r '.[] | "\(.rank). User \(.userId[0:8])... - Rewar
 
 # Step 8: Wait for question to expire and move to next question
 log_section "Step 8: Waiting for Question 2 to become active"
-log_info "Sleeping 32 seconds for question 1 to expire..."
-sleep 32
+log_info "Sleeping 16 seconds for question 1 to expire..."
+sleep 16
 
 ACTIVE_QUESTION_RESPONSE=$(curl -s -X GET "$API_BASE/games/$GAME_ID/questions/active")
 ACTIVE_QUESTION_TEXT=$(echo "$ACTIVE_QUESTION_RESPONSE" | jq -r '.question.questionText')
@@ -245,7 +306,7 @@ USER2_Q2_REWARD=$(echo "$USER2_Q2_ANSWER" | jq -r '.rewardAmount')
 USER2_Q2_RANK=$(echo "$USER2_Q2_ANSWER" | jq -r '.rank')
 log_success "User 2: reward=$USER2_Q2_REWARD, rank=$USER2_Q2_RANK"
 
-sleep 0.5
+sleep 0.1
 
 # User 1 is second
 log_info "User 1 (Alice) submitting correct answer second..."
@@ -260,14 +321,169 @@ USER1_Q2_REWARD=$(echo "$USER1_Q2_ANSWER" | jq -r '.rewardAmount')
 USER1_Q2_RANK=$(echo "$USER1_Q2_ANSWER" | jq -r '.rank')
 log_success "User 1: reward=$USER1_Q2_REWARD, rank=$USER1_Q2_RANK"
 
-# Step 10: Check Game Leaderboard
-log_section "Step 10: Checking Game Leaderboard (After 2 Questions)"
+sleep 0.1
+log_info "User 7 (Grace) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER7_ID\",
+        \"selectedOptionId\": \"$QUESTION2_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 7: answered"
+
+sleep 0.1
+log_info "User 8 (Henry) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER8_ID\",
+        \"selectedOptionId\": \"$QUESTION2_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 8: answered"
+
+# Step 10: Wait for Question 3 to become active
+log_section "Step 10: Waiting for Question 3 to become active"
+log_info "Sleeping 16 seconds for question 2 to expire..."
+sleep 16
+
+ACTIVE_QUESTION_RESPONSE=$(curl -s -X GET "$API_BASE/games/$GAME_ID/questions/active")
+ACTIVE_QUESTION_TEXT=$(echo "$ACTIVE_QUESTION_RESPONSE" | jq -r '.question.questionText')
+ACTIVE_QUESTION_ID=$(echo "$ACTIVE_QUESTION_RESPONSE" | jq -r '.question.id')
+log_success "Active question is now: '$ACTIVE_QUESTION_TEXT'"
+
+# Step 11: Submit answers for Question 3 (Blue Sky)
+log_section "Step 11: Submitting Answers for Question 3 (Sky Color)"
+
+log_info "User 1 (Alice) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER1_ID\",
+        \"selectedOptionId\": \"$QUESTION3_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 1: answered"
+
+sleep 0.1
+log_info "User 3 (Carol) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER3_ID\",
+        \"selectedOptionId\": \"$QUESTION3_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 3: answered"
+
+sleep 0.1
+log_info "User 5 (Eve) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER5_ID\",
+        \"selectedOptionId\": \"$QUESTION3_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 5: answered"
+
+# Step 12: Wait for Question 4 to become active
+log_section "Step 12: Waiting for Question 4 to become active"
+log_info "Sleeping 16 seconds for question 3 to expire..."
+sleep 16
+
+ACTIVE_QUESTION_RESPONSE=$(curl -s -X GET "$API_BASE/games/$GAME_ID/questions/active")
+ACTIVE_QUESTION_TEXT=$(echo "$ACTIVE_QUESTION_RESPONSE" | jq -r '.question.questionText')
+log_success "Active question is now: '$ACTIVE_QUESTION_TEXT'"
+
+# Step 13: Submit answers for Question 4 (Jupiter)
+log_section "Step 13: Submitting Answers for Question 4 (Largest Planet)"
+
+log_info "User 2 (Bob) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER2_ID\",
+        \"selectedOptionId\": \"$QUESTION4_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 2: answered"
+
+sleep 0.1
+log_info "User 4 (Dave) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER4_ID\",
+        \"selectedOptionId\": \"$QUESTION4_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 4: answered"
+
+sleep 0.1
+log_info "User 6 (Frank) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER6_ID\",
+        \"selectedOptionId\": \"$QUESTION4_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 6: answered"
+
+# Step 14: Wait for Question 5 to become active
+log_section "Step 14: Waiting for Question 5 to become active"
+log_info "Sleeping 16 seconds for question 4 to expire..."
+sleep 16
+
+ACTIVE_QUESTION_RESPONSE=$(curl -s -X GET "$API_BASE/games/$GAME_ID/questions/active")
+ACTIVE_QUESTION_TEXT=$(echo "$ACTIVE_QUESTION_RESPONSE" | jq -r '.question.questionText')
+log_success "Active question is now: '$ACTIVE_QUESTION_TEXT'"
+
+# Step 15: Submit answers for Question 5 (7 Continents)
+log_section "Step 15: Submitting Answers for Question 5 (Continents)"
+
+log_info "User 3 (Carol) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER3_ID\",
+        \"selectedOptionId\": \"$QUESTION5_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 3: answered"
+
+sleep 0.1
+log_info "User 7 (Grace) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER7_ID\",
+        \"selectedOptionId\": \"$QUESTION5_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 7: answered"
+
+sleep 0.1
+log_info "User 8 (Henry) submitting correct answer..."
+curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER8_ID\",
+        \"selectedOptionId\": \"$QUESTION5_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }" > /dev/null
+log_success "User 8: answered"
+
+# Step 16: Check Game Leaderboard
+log_section "Step 16: Checking Game Leaderboard (After 5 Questions)"
 GAME_LEADERBOARD=$(curl -s -X GET "$API_BASE/leaderboards/games/$GAME_ID?limit=10")
 log_success "Game Leaderboard:"
 echo "$GAME_LEADERBOARD" | jq -r '.[] | "\(.rank). User \(.userId[0:8])... - Total Reward: $\(.totalReward)"'
 
-# Step 11: Try duplicate answer (should fail)
-log_section "Step 11: Testing Duplicate Answer Prevention"
+# Step 17: Try duplicate answer (should fail)
+log_section "Step 17: Testing Duplicate Answer Prevention"
 log_info "User 1 attempting to answer Question 2 again (should fail)..."
 DUPLICATE_RESPONSE=$(curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
     -H "Content-Type: application/json" \
@@ -284,8 +500,8 @@ else
     echo "$DUPLICATE_RESPONSE" | jq '.'
 fi
 
-# Step 12: Complete the game
-log_section "Step 12: Completing Game"
+# Step 18: Complete the game
+log_section "Step 18: Completing Game"
 COMPLETE_GAME_RESPONSE=$(curl -s -X POST "$API_BASE/games/$GAME_ID/complete")
 GAME_STATUS=$(echo "$COMPLETE_GAME_RESPONSE" | jq -r '.status')
 GAME_ENDED_AT=$(echo "$COMPLETE_GAME_RESPONSE" | jq -r '.endedAt')
@@ -294,14 +510,14 @@ log_success "Game completed with status: $GAME_STATUS"
 log_info "Ended at: $GAME_ENDED_AT"
 log_info "Remaining budget: $REMAINING_BUDGET"
 
-# Step 13: Check final game leaderboard
-log_section "Step 13: Final Game Leaderboard"
+# Step 19: Check final game leaderboard
+log_section "Step 19: Final Game Leaderboard"
 FINAL_LEADERBOARD=$(curl -s -X GET "$API_BASE/leaderboards/games/$GAME_ID?limit=10")
 log_success "Final Game Leaderboard:"
 echo "$FINAL_LEADERBOARD" | jq -r '.[] | "\(.rank). User \(.userId[0:8])... - Total Reward: $\(.totalReward)"'
 
-# Step 14: Check individual user game results
-log_section "Step 14: Individual User Results"
+# Step 20: Check individual user game results
+log_section "Step 20: Individual User Results"
 
 log_info "Checking User 1 (Alice) results..."
 USER1_RESULT=$(curl -s -X GET "$API_BASE/leaderboards/users/$USER1_ID/games/$GAME_ID")
@@ -325,14 +541,14 @@ else
     log_info "User 2 result not yet finalized in Cassandra (normal - might be processed async)"
 fi
 
-# Step 15: Get game details
-log_section "Step 15: Final Game Details"
+# Step 21: Get game details
+log_section "Step 21: Final Game Details"
 GAME_DETAILS=$(curl -s -X GET "$API_BASE/games/$GAME_ID")
 log_success "Game Details:"
 echo "$GAME_DETAILS" | jq '{id, name, gameType, status, initialBudget, remainingBudget, startedAt, endedAt}'
 
-# Step 16: List all games
-log_section "Step 16: Listing All Games"
+# Step 22: List all games
+log_section "Step 22: Listing All Games"
 ALL_GAMES=$(curl -s -X GET "$API_BASE/games")
 TOTAL_GAMES=$(echo "$ALL_GAMES" | jq '. | length')
 log_success "Total games in system: $TOTAL_GAMES"
