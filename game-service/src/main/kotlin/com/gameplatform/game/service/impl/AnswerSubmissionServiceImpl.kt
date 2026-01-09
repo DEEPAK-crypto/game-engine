@@ -1,9 +1,7 @@
 package com.gameplatform.game.service.impl
 
-import com.gameplatform.game.cassandra.entity.QuestionLeaderboard
 import com.gameplatform.game.cassandra.entity.Turn
 import com.gameplatform.game.cassandra.entity.UserQuestionAnswer
-import com.gameplatform.game.cassandra.repository.QuestionLeaderboardRepository
 import com.gameplatform.game.cassandra.repository.TurnRepository
 import com.gameplatform.game.cassandra.repository.UserQuestionAnswerRepository
 import com.gameplatform.game.domain.calculator.ActiveQuestionCalculator
@@ -11,16 +9,19 @@ import com.gameplatform.game.domain.model.ActiveQuestionResult
 import com.gameplatform.game.dto.AnswerSubmissionResponse
 import com.gameplatform.game.dto.SubmitAnswerRequest
 import com.gameplatform.game.exception.*
+import com.gameplatform.game.metrics.GameMetrics
 import com.gameplatform.game.repository.GameRepository
 import com.gameplatform.game.repository.QuestionRepository
 import com.gameplatform.game.service.AnswerSubmissionService
 import com.gameplatform.game.service.BudgetService
+import com.gameplatform.game.service.RedisLeaderboardService
+import net.logstash.logback.argument.StructuredArguments.kv
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
 
 @Service
 class AnswerSubmissionServiceImpl(
@@ -28,22 +29,41 @@ class AnswerSubmissionServiceImpl(
     private val questionRepository: QuestionRepository,
     private val turnRepository: TurnRepository,
     private val userQuestionAnswerRepository: UserQuestionAnswerRepository,
-    private val questionLeaderboardRepository: QuestionLeaderboardRepository,
-    private val budgetService: BudgetService
+    private val budgetService: BudgetService,
+    private val gameMetrics: GameMetrics,
+    private val redisLeaderboardService: RedisLeaderboardService
 ) : AnswerSubmissionService {
 
-    private val serverSequence = AtomicLong(0)
+    private val log = LoggerFactory.getLogger(AnswerSubmissionServiceImpl::class.java)
 
     @Transactional
     override fun submitAnswer(gameId: UUID, request: SubmitAnswerRequest): AnswerSubmissionResponse {
+        log.info(
+            "Received answer submission",
+            kv("gameId", gameId),
+            kv("userId", request.userId),
+            kv("selectedOptionId", request.selectedOptionId),
+            kv("clientTimestamp", request.clientTimestamp)
+        )
+
         val serverTimestamp = Instant.now()
-        val sequence = serverSequence.incrementAndGet()
+        // Use nanosecond time for server sequence - unique across all instances
+        // This is only used for tie-breaking when client_timestamp is identical
+        val sequence = System.nanoTime()
 
         // 1. Validate game is active
         val game = gameRepository.findById(gameId)
-            ?: throw GameNotFoundException(gameId)
+            ?: run {
+                log.warn("Game not found", kv("gameId", gameId))
+                throw GameNotFoundException(gameId)
+            }
 
         if (!game.isActive()) {
+            log.warn(
+                "Game is not active",
+                kv("gameId", gameId),
+                kv("gameStatus", game.status)
+            )
             throw InvalidGameStateException("Game $gameId is not active")
         }
 
@@ -68,6 +88,15 @@ class AnswerSubmissionServiceImpl(
 
         // 3. Check if answer is within time window
         if (serverTimestamp > activeResult.expiresAt!!) {
+            log.warn(
+                "Answer submission after question expired",
+                kv("gameId", gameId),
+                kv("userId", request.userId),
+                kv("questionId", activeQuestion.id),
+                kv("expiresAt", activeResult.expiresAt),
+                kv("serverTimestamp", serverTimestamp)
+            )
+            gameMetrics.recordLateAnswer()
             throw AnswerSubmissionClosedException(activeQuestion.id)
         }
 
@@ -78,6 +107,13 @@ class AnswerSubmissionServiceImpl(
             activeQuestion.id
         )
         if (existingAnswer != null) {
+            log.warn(
+                "Duplicate answer submission attempt",
+                kv("gameId", gameId),
+                kv("userId", request.userId),
+                kv("questionId", activeQuestion.id)
+            )
+            gameMetrics.recordDuplicateAnswer()
             throw DuplicateAnswerException(request.userId, activeQuestion.id)
         }
 
@@ -88,33 +124,80 @@ class AnswerSubmissionServiceImpl(
         // 6. Check if answer is correct
         val isCorrect = activeQuestion.correctOptionId == request.selectedOptionId
 
+        log.debug(
+            "Answer correctness determined",
+            kv("gameId", gameId),
+            kv("userId", request.userId),
+            kv("questionId", activeQuestion.id),
+            kv("isCorrect", isCorrect)
+        )
+
+        // Record metrics for answer submission
+        gameMetrics.recordAnswerSubmission(isCorrect, gameId, activeQuestion.id)
+
         // 7. Determine reward amount
         var rewardAmount = BigDecimal.ZERO
         var rank: Int? = null
 
         if (isCorrect) {
-            // Get current leaderboard to determine rank
-            val currentLeaderboard = questionLeaderboardRepository
-                .findByGameIdAndQuestionIdOrderByRank(gameId, activeQuestion.id)
-
-            rank = currentLeaderboard.size + 1
-
             // First correct answer gets the reward
+            // We need to add to leaderboard before checking rank to ensure atomicity
+            redisLeaderboardService.addToQuestionLeaderboard(
+                gameId = gameId,
+                questionId = activeQuestion.id,
+                userId = request.userId,
+                rewardAmount = BigDecimal.ZERO, // Add to leaderboard first with zero reward
+                answeredAt = serverTimestamp
+            )
+
+            // Get user's rank after adding to leaderboard
+            rank = redisLeaderboardService.getUserQuestionRank(gameId, activeQuestion.id, request.userId)
+
+            log.debug(
+                "Correct answer received",
+                kv("gameId", gameId),
+                kv("userId", request.userId),
+                kv("questionId", activeQuestion.id),
+                kv("rank", rank)
+            )
+
+            // Award reward to first correct answer
             if (rank == 1) {
                 rewardAmount = activeQuestion.reward
                 budgetService.awardToUser(gameId, request.userId, activeQuestion.id, rewardAmount)
+
+                log.info(
+                    "Reward awarded for first correct answer",
+                    kv("gameId", gameId),
+                    kv("userId", request.userId),
+                    kv("questionId", activeQuestion.id),
+                    kv("rewardAmount", rewardAmount)
+                )
+
+                gameMetrics.recordReward(rewardAmount, gameId, request.userId)
+
+                // Update leaderboard with actual reward amount
+                redisLeaderboardService.addToQuestionLeaderboard(
+                    gameId = gameId,
+                    questionId = activeQuestion.id,
+                    userId = request.userId,
+                    rewardAmount = rewardAmount,
+                    answeredAt = serverTimestamp
+                )
             }
 
-            // Update question leaderboard
-            val leaderboardEntry = QuestionLeaderboard(
+            // Update user's total reward in game leaderboard
+            // Get user's current total reward
+            val userTotalReward = userQuestionAnswerRepository
+                .findByUserIdAndGameId(request.userId, gameId)
+                .sumOf { it.rewardAmount } + rewardAmount
+
+            redisLeaderboardService.updateGameLeaderboard(
                 gameId = gameId,
-                questionId = activeQuestion.id,
-                rank = rank,
                 userId = request.userId,
-                rewardAmount = rewardAmount,
-                answeredAt = serverTimestamp
+                totalReward = userTotalReward,
+                lastUpdated = serverTimestamp
             )
-            questionLeaderboardRepository.save(leaderboardEntry)
         }
 
         // 8. Save turn (FIFO ordering)
@@ -145,6 +228,17 @@ class AnswerSubmissionServiceImpl(
             answeredAt = serverTimestamp
         )
         userQuestionAnswerRepository.save(userAnswer)
+
+        log.info(
+            "Answer submission processed successfully",
+            kv("gameId", gameId),
+            kv("userId", request.userId),
+            kv("questionId", activeQuestion.id),
+            kv("turnId", turnId),
+            kv("isCorrect", isCorrect),
+            kv("rank", rank),
+            kv("rewardAmount", rewardAmount)
+        )
 
         return AnswerSubmissionResponse(
             turnId = turnId,

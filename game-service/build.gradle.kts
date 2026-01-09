@@ -28,6 +28,9 @@ dependencies {
     // Micrometer for metrics
     implementation("io.micrometer:micrometer-registry-prometheus")
 
+    // Structured logging
+    implementation("net.logstash.logback:logstash-logback-encoder:7.4")
+
     // OpenAPI documentation
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0")
 

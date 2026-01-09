@@ -1,32 +1,24 @@
 package com.gameplatform.game.service.impl
 
-import com.gameplatform.game.cassandra.entity.GameLeaderboard
-import com.gameplatform.game.cassandra.entity.UserGameResult
-import com.gameplatform.game.cassandra.repository.GameLeaderboardRepository
-import com.gameplatform.game.cassandra.repository.QuestionLeaderboardRepository
 import com.gameplatform.game.cassandra.repository.UserGameResultRepository
-import com.gameplatform.game.cassandra.repository.UserQuestionAnswerRepository
 import com.gameplatform.game.dto.GameLeaderboardResponse
 import com.gameplatform.game.dto.QuestionLeaderboardResponse
 import com.gameplatform.game.dto.UserGameResultResponse
-import com.gameplatform.game.exception.GameNotFoundException
-import com.gameplatform.game.repository.GameRepository
-import com.gameplatform.game.repository.QuestionRepository
 import com.gameplatform.game.service.LeaderboardService
+import com.gameplatform.game.service.RedisLeaderboardService
+import net.logstash.logback.argument.StructuredArguments.kv
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.math.BigDecimal
 import java.util.UUID
 
 @Service
 class LeaderboardServiceImpl(
-    private val questionLeaderboardRepository: QuestionLeaderboardRepository,
-    private val gameLeaderboardRepository: GameLeaderboardRepository,
     private val userGameResultRepository: UserGameResultRepository,
-    private val userQuestionAnswerRepository: UserQuestionAnswerRepository,
-    private val gameRepository: GameRepository,
-    private val questionRepository: QuestionRepository
+    private val redisLeaderboardService: RedisLeaderboardService
 ) : LeaderboardService {
+
+    private val log = LoggerFactory.getLogger(LeaderboardServiceImpl::class.java)
 
     @Transactional(readOnly = true)
     override fun getQuestionLeaderboard(
@@ -34,83 +26,71 @@ class LeaderboardServiceImpl(
         questionId: UUID,
         limit: Int
     ): List<QuestionLeaderboardResponse> {
-        return questionLeaderboardRepository
-            .findTopNByGameIdAndQuestionId(gameId, questionId, limit)
-            .map { QuestionLeaderboardResponse.from(it) }
+        log.debug(
+            "Retrieving question leaderboard from Redis",
+            kv("gameId", gameId),
+            kv("questionId", questionId),
+            kv("limit", limit)
+        )
+
+        // Get leaderboard from Redis (fast O(log N) query)
+        val redisEntries = redisLeaderboardService.getQuestionLeaderboard(gameId, questionId, limit)
+
+        // Convert to response format
+        val results = redisEntries.map { entry ->
+            QuestionLeaderboardResponse(
+                rank = entry.rank,
+                userId = entry.userId,
+                rewardAmount = entry.rewardAmount,
+                answeredAt = entry.answeredAt
+            )
+        }
+
+        log.debug("Question leaderboard retrieved from Redis", kv("entryCount", results.size))
+        return results
     }
 
     @Transactional(readOnly = true)
     override fun getGameLeaderboard(gameId: UUID, limit: Int): List<GameLeaderboardResponse> {
-        return gameLeaderboardRepository
-            .findTopNByGameId(gameId, limit)
-            .map { GameLeaderboardResponse.from(it) }
-    }
+        log.debug(
+            "Retrieving game leaderboard from Redis",
+            kv("gameId", gameId),
+            kv("limit", limit)
+        )
 
-    @Transactional
-    override fun updateGameLeaderboard(gameId: UUID) {
-        val game = gameRepository.findById(gameId)
-            ?: throw GameNotFoundException(gameId)
+        // Get leaderboard from Redis (fast O(log N) query)
+        val redisEntries = redisLeaderboardService.getGameLeaderboard(gameId, limit)
 
-        val questions = questionRepository.findByGameIdOrderByIndex(gameId)
-        val totalQuestions = questions.size
-
-        // Get all user answers for this game
-        val userStats = mutableMapOf<UUID, UserStats>()
-
-        questions.forEach { question ->
-            val leaderboard = questionLeaderboardRepository
-                .findByGameIdAndQuestionIdOrderByRank(gameId, question.id)
-
-            leaderboard.forEach { entry ->
-                val stats = userStats.getOrPut(entry.userId) { UserStats() }
-                stats.totalReward += entry.rewardAmount
-                if (entry.rewardAmount > BigDecimal.ZERO) {
-                    stats.correctAnswers++
-                }
-            }
+        // Convert to response format
+        val results = redisEntries.map { entry ->
+            GameLeaderboardResponse(
+                rank = entry.rank,
+                userId = entry.userId,
+                totalReward = entry.totalReward,
+                correctAnswers = 0  // Not stored in Redis, set to 0
+            )
         }
 
-        // Sort users by total reward (descending) and correct answers (descending)
-        val sortedUsers = userStats.entries
-            .sortedWith(
-                compareByDescending<Map.Entry<UUID, UserStats>> { it.value.totalReward }
-                    .thenByDescending { it.value.correctAnswers }
-            )
-
-        // Save game leaderboard
-        sortedUsers.forEachIndexed { index, entry ->
-            val rank = index + 1
-            val leaderboardEntry = GameLeaderboard(
-                gameId = gameId,
-                rank = rank,
-                userId = entry.key,
-                totalReward = entry.value.totalReward,
-                correctAnswers = entry.value.correctAnswers
-            )
-            gameLeaderboardRepository.save(leaderboardEntry)
-
-            // Save user game result
-            val userResult = UserGameResult(
-                userId = entry.key,
-                gameId = gameId,
-                totalReward = entry.value.totalReward,
-                correctAnswers = entry.value.correctAnswers,
-                totalQuestions = totalQuestions,
-                finalRank = rank
-            )
-            userGameResultRepository.save(userResult)
-        }
+        log.debug("Game leaderboard retrieved from Redis", kv("entryCount", results.size))
+        return results
     }
 
     @Transactional(readOnly = true)
     override fun getUserGameResult(userId: UUID, gameId: UUID): UserGameResultResponse? {
+        log.debug(
+            "Retrieving user game result",
+            kv("userId", userId),
+            kv("gameId", gameId)
+        )
         val result = userGameResultRepository.findByUserIdAndGameId(userId, gameId)
-            ?: return null
+            ?: run {
+                log.debug(
+                    "User game result not found",
+                    kv("userId", userId),
+                    kv("gameId", gameId)
+                )
+                return null
+            }
         return UserGameResultResponse.from(result)
     }
-
-    private data class UserStats(
-        var totalReward: BigDecimal = BigDecimal.ZERO,
-        var correctAnswers: Int = 0
-    )
 }

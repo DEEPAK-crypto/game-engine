@@ -1,48 +1,36 @@
 package com.gameplatform.game.dto
 
-import com.gameplatform.game.cassandra.entity.GameLeaderboard
-import com.gameplatform.game.cassandra.entity.QuestionLeaderboard
 import com.gameplatform.game.cassandra.entity.UserGameResult
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
+/**
+ * Response DTO for question leaderboard entries.
+ * Data is sourced from Redis sorted sets.
+ */
 data class QuestionLeaderboardResponse(
     val rank: Int,
     val userId: UUID,
     val rewardAmount: BigDecimal,
     val answeredAt: Instant
-) {
-    companion object {
-        fun from(entry: QuestionLeaderboard): QuestionLeaderboardResponse {
-            return QuestionLeaderboardResponse(
-                rank = entry.rank,
-                userId = entry.userId,
-                rewardAmount = entry.rewardAmount,
-                answeredAt = entry.answeredAt
-            )
-        }
-    }
-}
+)
 
+/**
+ * Response DTO for game leaderboard entries.
+ * Data is sourced from Redis sorted sets.
+ */
 data class GameLeaderboardResponse(
     val rank: Int,
     val userId: UUID,
     val totalReward: BigDecimal,
     val correctAnswers: Int
-) {
-    companion object {
-        fun from(entry: GameLeaderboard): GameLeaderboardResponse {
-            return GameLeaderboardResponse(
-                rank = entry.rank,
-                userId = entry.userId,
-                totalReward = entry.totalReward,
-                correctAnswers = entry.correctAnswers
-            )
-        }
-    }
-}
+)
 
+/**
+ * Response DTO for user game results.
+ * Data is sourced from Cassandra user_game_results table.
+ */
 data class UserGameResultResponse(
     val userId: UUID,
     val gameId: UUID,

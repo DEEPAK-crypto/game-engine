@@ -22,6 +22,9 @@ class CassandraConfig : AbstractCassandraConfiguration() {
     @Value("\${spring.cassandra.local-datacenter}")
     private lateinit var localDatacenter: String
 
+    @Value("\${spring.cassandra.schema-action:NONE}")
+    private lateinit var schemaActionValue: String
+
     override fun getKeyspaceName(): String = keyspaceName
 
     override fun getContactPoints(): String = contactPoints
@@ -30,5 +33,5 @@ class CassandraConfig : AbstractCassandraConfiguration() {
 
     override fun getLocalDataCenter(): String = localDatacenter
 
-    override fun getSchemaAction(): SchemaAction = SchemaAction.NONE
+    override fun getSchemaAction(): SchemaAction = SchemaAction.valueOf(schemaActionValue.uppercase().replace("-", "_"))
 }

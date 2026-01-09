@@ -14,7 +14,7 @@ CREATE TABLE games (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT chk_game_type CHECK (game_type IN ('MCQ_FIFO', 'MCQ_FASTEST')),
-    CONSTRAINT chk_status CHECK (status IN ('SCHEDULED', 'ACTIVE', 'COMPLETED')),
+    CONSTRAINT chk_status CHECK (status IN ('DRAFT', 'SCHEDULED', 'ACTIVE', 'COMPLETED')),
     CONSTRAINT chk_budget_positive CHECK (initial_budget >= 0),
     CONSTRAINT chk_remaining_budget CHECK (remaining_budget >= 0 AND remaining_budget <= initial_budget),
     CONSTRAINT chk_timer_positive CHECK (question_timer_seconds > 0)

@@ -5,9 +5,12 @@ import com.gameplatform.game.domain.model.BudgetTransaction
 import com.gameplatform.game.exception.BudgetAllocationException
 import com.gameplatform.game.exception.GameNotFoundException
 import com.gameplatform.game.exception.InsufficientBudgetException
+import com.gameplatform.game.metrics.GameMetrics
 import com.gameplatform.game.repository.BudgetTransactionRepository
 import com.gameplatform.game.repository.GameRepository
 import com.gameplatform.game.service.BudgetService
+import net.logstash.logback.argument.StructuredArguments.kv
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Isolation
 import org.springframework.transaction.annotation.Transactional
@@ -18,15 +21,35 @@ import java.util.UUID
 @Service
 class BudgetServiceImpl(
     private val gameRepository: GameRepository,
-    private val budgetTransactionRepository: BudgetTransactionRepository
+    private val budgetTransactionRepository: BudgetTransactionRepository,
+    private val gameMetrics: GameMetrics
 ) : BudgetService {
+
+    private val log = LoggerFactory.getLogger(BudgetServiceImpl::class.java)
 
     @Transactional(isolation = Isolation.SERIALIZABLE)
     override fun allocateQuestionReward(gameId: UUID, questionId: UUID, amount: BigDecimal): Boolean {
+        log.info(
+            "Allocating question reward",
+            kv("gameId", gameId),
+            kv("questionId", questionId),
+            kv("amount", amount)
+        )
+
         val game = gameRepository.findById(gameId)
-            ?: throw GameNotFoundException(gameId)
+            ?: run {
+                log.warn("Game not found for budget allocation", kv("gameId", gameId))
+                throw GameNotFoundException(gameId)
+            }
 
         if (game.remainingBudget < amount) {
+            log.warn(
+                "Insufficient budget for question reward allocation",
+                kv("gameId", gameId),
+                kv("questionId", questionId),
+                kv("requestedAmount", amount),
+                kv("remainingBudget", game.remainingBudget)
+            )
             return false
         }
 
@@ -34,6 +57,11 @@ class BudgetServiceImpl(
         val success = gameRepository.updateRemainingBudget(gameId, newBudget)
 
         if (!success) {
+            log.error(
+                "Failed to update remaining budget",
+                kv("gameId", gameId),
+                kv("questionId", questionId)
+            )
             throw BudgetAllocationException("Failed to allocate budget for question $questionId")
         }
 
@@ -50,15 +78,44 @@ class BudgetServiceImpl(
         )
 
         budgetTransactionRepository.save(transaction)
+
+        log.info(
+            "Question reward allocated successfully",
+            kv("gameId", gameId),
+            kv("questionId", questionId),
+            kv("amount", amount),
+            kv("newRemainingBudget", newBudget)
+        )
+
+        gameMetrics.recordBudgetAllocated(amount, gameId)
+
         return true
     }
 
     @Transactional(isolation = Isolation.SERIALIZABLE)
     override fun awardToUser(gameId: UUID, userId: UUID, questionId: UUID, amount: BigDecimal) {
+        log.info(
+            "Awarding budget to user",
+            kv("gameId", gameId),
+            kv("userId", userId),
+            kv("questionId", questionId),
+            kv("amount", amount)
+        )
+
         val game = gameRepository.findById(gameId)
-            ?: throw GameNotFoundException(gameId)
+            ?: run {
+                log.warn("Game not found for user award", kv("gameId", gameId))
+                throw GameNotFoundException(gameId)
+            }
 
         if (game.remainingBudget < amount) {
+            log.error(
+                "Insufficient budget for user award",
+                kv("gameId", gameId),
+                kv("userId", userId),
+                kv("requestedAmount", amount),
+                kv("remainingBudget", game.remainingBudget)
+            )
             throw InsufficientBudgetException(
                 gameId,
                 amount.toString(),
@@ -70,6 +127,11 @@ class BudgetServiceImpl(
         val success = gameRepository.updateRemainingBudget(gameId, newBudget)
 
         if (!success) {
+            log.error(
+                "Failed to update budget for user award",
+                kv("gameId", gameId),
+                kv("userId", userId)
+            )
             throw BudgetAllocationException("Failed to award budget to user $userId")
         }
 
@@ -86,12 +148,27 @@ class BudgetServiceImpl(
         )
 
         budgetTransactionRepository.save(transaction)
+
+        log.info(
+            "Budget awarded to user successfully",
+            kv("gameId", gameId),
+            kv("userId", userId),
+            kv("questionId", questionId),
+            kv("amount", amount),
+            kv("newRemainingBudget", newBudget)
+        )
+
+        gameMetrics.recordBudgetAwarded(amount, gameId, userId)
     }
 
     @Transactional(readOnly = true)
     override fun getRemainingBudget(gameId: UUID): BigDecimal {
+        log.debug("Retrieving remaining budget", kv("gameId", gameId))
         val game = gameRepository.findById(gameId)
-            ?: throw GameNotFoundException(gameId)
+            ?: run {
+                log.warn("Game not found when retrieving budget", kv("gameId", gameId))
+                throw GameNotFoundException(gameId)
+            }
         return game.remainingBudget
     }
 }

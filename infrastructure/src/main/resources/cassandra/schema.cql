@@ -1,5 +1,6 @@
 -- Cassandra Schema for Game Platform
--- High-throughput tables for answer submissions and leaderboards
+-- High-throughput tables for answer submissions and game results
+-- Note: Leaderboards are now managed in Redis for real-time O(log N) queries
 
 -- Create keyspace
 CREATE KEYSPACE IF NOT EXISTS game_platform
@@ -38,28 +39,8 @@ CREATE TABLE IF NOT EXISTS user_question_answers (
     PRIMARY KEY (user_id, game_id, question_id)
 );
 
--- Question leaderboards: Top performers for each question
-CREATE TABLE IF NOT EXISTS question_leaderboards (
-    game_id UUID,
-    question_id UUID,
-    rank INT,
-    user_id UUID,
-    reward_amount DECIMAL,
-    answered_at TIMESTAMP,
-    PRIMARY KEY ((game_id, question_id), rank)
-) WITH CLUSTERING ORDER BY (rank ASC);
-
--- Game leaderboards: Overall game rankings
-CREATE TABLE IF NOT EXISTS game_leaderboards (
-    game_id UUID,
-    rank INT,
-    user_id UUID,
-    total_reward DECIMAL,
-    correct_answers INT,
-    PRIMARY KEY (game_id, rank)
-) WITH CLUSTERING ORDER BY (rank ASC);
-
 -- User game results: User's complete results for a game
+-- Stored after game completion for historical records
 CREATE TABLE IF NOT EXISTS user_game_results (
     user_id UUID,
     game_id UUID,

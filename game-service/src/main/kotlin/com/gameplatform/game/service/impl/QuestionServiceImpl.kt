@@ -75,8 +75,8 @@ class QuestionServiceImpl(
             allOptions.addAll(options)
         }
 
-        questionRepository.saveAll(questions)
         questionOptionRepository.saveAll(allOptions)
+        questionRepository.saveAll(questions)
 
         return questions.map { question ->
             val options = allOptions.filter { it.questionId == question.id }

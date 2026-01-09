@@ -2,9 +2,6 @@ buildscript {
     repositories {
         mavenCentral()
     }
-    dependencies {
-        classpath("org.flywaydb:flyway-database-postgresql:10.4.1")
-    }
 }
 
 plugins {
@@ -12,7 +9,7 @@ plugins {
     kotlin("plugin.spring") version "2.0.21" apply false
     id("org.springframework.boot") version "3.2.5" apply false
     id("io.spring.dependency-management") version "1.1.4" apply false
-    id("org.flywaydb.flyway") version "10.4.1" apply false
+    id("org.flywaydb.flyway") version "9.22.3" apply false
     id("nu.studer.jooq") version "9.0" apply false
 }
 

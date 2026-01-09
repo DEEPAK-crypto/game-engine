@@ -30,11 +30,6 @@ class LeaderboardController(
         return leaderboardService.getQuestionLeaderboard(gameId, questionId, limit)
     }
 
-    @PostMapping("/games/{gameId}/finalize")
-    fun finalizeGameLeaderboard(@PathVariable gameId: UUID) {
-        leaderboardService.updateGameLeaderboard(gameId)
-    }
-
     @GetMapping("/users/{userId}/games/{gameId}")
     fun getUserGameResult(
         @PathVariable userId: UUID,
