@@ -22,7 +22,8 @@ import java.util.UUID
 @Transactional
 class GameServiceImpl(
     private val gameRepository: GameRepository,
-    private val gameMetrics: GameMetrics
+    private val gameMetrics: GameMetrics,
+    private val activeQuestionCacheService: com.gameplatform.game.service.ActiveQuestionCacheService
 ) : GameService {
 
     private val log = LoggerFactory.getLogger(GameServiceImpl::class.java)
@@ -146,6 +147,9 @@ class GameServiceImpl(
         )
 
         gameMetrics.recordGameStarted(gameId)
+
+        // Invalidate active question cache so it gets recalculated with new start time
+        activeQuestionCacheService.invalidate(gameId)
 
         return GameResponse.from(updated)
     }

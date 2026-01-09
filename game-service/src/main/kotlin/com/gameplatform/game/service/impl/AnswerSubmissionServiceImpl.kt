@@ -4,8 +4,6 @@ import com.gameplatform.game.cassandra.entity.Turn
 import com.gameplatform.game.cassandra.entity.UserQuestionAnswer
 import com.gameplatform.game.cassandra.repository.TurnRepository
 import com.gameplatform.game.cassandra.repository.UserQuestionAnswerRepository
-import com.gameplatform.game.domain.calculator.ActiveQuestionCalculator
-import com.gameplatform.game.domain.model.ActiveQuestionResult
 import com.gameplatform.game.dto.AnswerSubmissionResponse
 import com.gameplatform.game.dto.SubmitAnswerRequest
 import com.gameplatform.game.exception.*
@@ -31,7 +29,8 @@ class AnswerSubmissionServiceImpl(
     private val userQuestionAnswerRepository: UserQuestionAnswerRepository,
     private val budgetService: BudgetService,
     private val gameMetrics: GameMetrics,
-    private val redisLeaderboardService: RedisLeaderboardService
+    private val redisLeaderboardService: RedisLeaderboardService,
+    private val activeQuestionCacheService: com.gameplatform.game.service.ActiveQuestionCacheService
 ) : AnswerSubmissionService {
 
     private val log = LoggerFactory.getLogger(AnswerSubmissionServiceImpl::class.java)
@@ -67,24 +66,19 @@ class AnswerSubmissionServiceImpl(
             throw InvalidGameStateException("Game $gameId is not active")
         }
 
-        // 2. Get active question
-        val startedAt = game.startedAt
-            ?: throw InvalidGameStateException("Game $gameId has no start time")
-
-        val questions = questionRepository.findByGameIdOrderByIndex(gameId)
-        if (questions.isEmpty()) {
-            throw NoActiveQuestionException(gameId)
-        }
-
-        val questionTimings = questions.map { com.gameplatform.game.domain.model.QuestionTiming.from(it) }
-        val activeResult = ActiveQuestionCalculator.calculate(startedAt, questionTimings, serverTimestamp)
+        // 2. Get active question (cached)
+        val activeResult = activeQuestionCacheService.getActiveQuestion(gameId, serverTimestamp)
+            ?: throw NoActiveQuestionException(gameId)
 
         if (!activeResult.hasActiveQuestion()) {
             throw NoActiveQuestionException(gameId)
         }
 
         val activeQuestionTiming = activeResult.activeQuestion!!
-        val activeQuestion = questions.first { it.id == activeQuestionTiming.questionId }
+
+        // Get full question details (we still need this for correctness check and reward)
+        val activeQuestion = questionRepository.findById(activeQuestionTiming.questionId)
+            ?: throw NoActiveQuestionException(gameId)
 
         // 3. Check if answer is within time window
         if (serverTimestamp > activeResult.expiresAt!!) {

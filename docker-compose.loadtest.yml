@@ -1,0 +1,145 @@
+version: '3.8'
+
+# Optimized Docker Compose configuration for load testing
+# Use with: docker-compose -f docker-compose.loadtest.yml up -d
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: game-platform-postgres
+    environment:
+      POSTGRES_DB: game_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"              # Support 100 from app pool + overhead
+      - "-c"
+      - "shared_buffers=512MB"             # Increased from default 128MB
+      - "-c"
+      - "effective_cache_size=1536MB"      # 75% of available RAM (assuming 2GB)
+      - "-c"
+      - "maintenance_work_mem=128MB"       # For index creation/maintenance
+      - "-c"
+      - "checkpoint_completion_target=0.9" # Spread out checkpoint writes
+      - "-c"
+      - "wal_buffers=16MB"                 # Write-ahead log buffers
+      - "-c"
+      - "default_statistics_target=100"    # Query planner statistics
+      - "-c"
+      - "random_page_cost=1.1"             # SSD optimization
+      - "-c"
+      - "effective_io_concurrency=200"     # SSD optimization
+      - "-c"
+      - "work_mem=4MB"                     # Per-operation memory
+      - "-c"
+      - "min_wal_size=1GB"
+      - "-c"
+      - "max_wal_size=4GB"
+      - "-c"
+      - "max_worker_processes=4"           # Parallel query workers
+      - "-c"
+      - "max_parallel_workers_per_gather=2"
+      - "-c"
+      - "max_parallel_workers=4"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Increase container resources
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  cassandra:
+    image: cassandra:4.1
+    container_name: game-platform-cassandra
+    environment:
+      CASSANDRA_CLUSTER_NAME: GamePlatformCluster
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_ENDPOINT_SNITCH: SimpleSnitch
+      # Increased heap sizes for load testing
+      MAX_HEAP_SIZE: 2G                    # Increased from 512M
+      HEAP_NEWSIZE: 512M                   # Increased from 128M
+      # Connection settings
+      CASSANDRA_NUM_TOKENS: 256
+      CASSANDRA_CONCURRENT_READS: 32       # Default 32
+      CASSANDRA_CONCURRENT_WRITES: 128     # Increased from 32 for write-heavy load
+      CASSANDRA_NATIVE_TRANSPORT_MAX_THREADS: 128  # Handle more concurrent connections
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+      - ./infrastructure/src/main/resources/cassandra:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    # Increase container resources
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  redis:
+    image: redis:7-alpine
+    container_name: game-platform-redis
+    command:
+      - "redis-server"
+      - "--maxmemory"
+      - "1gb"                              # Limit memory usage
+      - "--maxmemory-policy"
+      - "allkeys-lru"                      # Evict least recently used keys
+      - "--maxclients"
+      - "10000"                            # Support 100 connections from app + overhead
+      - "--tcp-backlog"
+      - "511"                              # Connection queue size
+      - "--timeout"
+      - "300"                              # Close idle connections after 5 minutes
+      - "--tcp-keepalive"
+      - "60"                               # TCP keepalive
+      - "--save"
+      - ""                                 # Disable RDB snapshots for performance
+      - "--appendonly"
+      - "no"                               # Disable AOF for performance (testing only!)
+      - "--loglevel"
+      - "warning"                          # Reduce logging overhead
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Increase container resources
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1500M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  postgres_data:
+  cassandra_data:
+  redis_data:

@@ -3,6 +3,7 @@ plugins {
     kotlin("plugin.spring")
     id("org.springframework.boot")
     id("io.spring.dependency-management")
+    id("io.gatling.gradle") version "3.10.3"
 }
 
 dependencies {
@@ -16,6 +17,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-data-cassandra")
+
+    // Redis connection pooling (required for Lettuce pooling)
+    implementation("org.apache.commons:commons-pool2")
 
     // Kotlin
     implementation(kotlin("stdlib"))
@@ -44,9 +48,24 @@ dependencies {
     testImplementation("it.ozimov:embedded-redis:0.7.3") {
         exclude(group = "org.slf4j", module = "slf4j-simple")
     }
+
+    // Gatling for load testing (Kotlin support)
+    gatling("io.gatling.highcharts:gatling-charts-highcharts:3.10.3")
+    gatling("io.gatling:gatling-app:3.10.3")
+    gatling(kotlin("stdlib"))
 }
 
 tasks.bootJar {
     enabled = true
     archiveFileName.set("game-service.jar")
+}
+
+// Configure Gatling
+gatling {
+    logLevel = "WARN"
+
+    // Optional: run only specific simulations
+    // simulations = {
+    //     include("com.gameplatform.game.gatling.GameLoadSimulation")
+    // }
 }

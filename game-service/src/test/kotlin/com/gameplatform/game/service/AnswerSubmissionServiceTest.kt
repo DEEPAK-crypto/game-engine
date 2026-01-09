@@ -2,8 +2,10 @@ package com.gameplatform.game.service
 
 import com.gameplatform.game.domain.enums.GameStatus
 import com.gameplatform.game.domain.enums.GameType
+import com.gameplatform.game.domain.model.ActiveQuestionResult
 import com.gameplatform.game.domain.model.Game
 import com.gameplatform.game.domain.model.Question
+import com.gameplatform.game.domain.model.QuestionTiming
 import com.gameplatform.game.dto.SubmitAnswerRequest
 import com.gameplatform.game.exception.*
 import com.gameplatform.game.repository.GameRepository
@@ -31,6 +33,7 @@ class AnswerSubmissionServiceTest {
     private lateinit var budgetService: BudgetService
     private lateinit var gameMetrics: GameMetrics
     private lateinit var redisLeaderboardService: RedisLeaderboardService
+    private lateinit var activeQuestionCacheService: ActiveQuestionCacheService
 
     @BeforeEach
     fun setup() {
@@ -41,6 +44,7 @@ class AnswerSubmissionServiceTest {
         budgetService = mock()
         gameMetrics = mock()
         redisLeaderboardService = mock()
+        activeQuestionCacheService = mock()
 
         answerSubmissionService = AnswerSubmissionServiceImpl(
             gameRepository,
@@ -49,7 +53,8 @@ class AnswerSubmissionServiceTest {
             userQuestionAnswerRepository,
             budgetService,
             gameMetrics,
-            redisLeaderboardService
+            redisLeaderboardService,
+            activeQuestionCacheService
         )
     }
 
@@ -87,7 +92,7 @@ class AnswerSubmissionServiceTest {
         val request = createSubmitAnswerRequest()
         val game = createGame(gameId, GameStatus.ACTIVE, startedAt = Instant.now())
         whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(questionRepository.findByGameIdOrderByIndex(gameId)).thenReturn(emptyList())
+        whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(null)
 
         // When & Then
         assertThatThrownBy {
@@ -103,9 +108,11 @@ class AnswerSubmissionServiceTest {
         val request = createSubmitAnswerRequest()
         val game = createGame(gameId, GameStatus.ACTIVE, startedAt = Instant.now().minusSeconds(10))
         val question = createQuestion(questionId, gameId, index = 0, durationSeconds = 30)
+        val activeQuestionResult = createActiveQuestionResult(questionId, Instant.now().plusSeconds(20))
 
         whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(questionRepository.findByGameIdOrderByIndex(gameId)).thenReturn(listOf(question))
+        whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
+        whenever(questionRepository.findById(questionId)).thenReturn(question)
         whenever(userQuestionAnswerRepository.findByUserIdAndGameIdAndQuestionId(request.userId, gameId, questionId))
             .thenReturn(mock()) // Return existing answer
 
@@ -126,9 +133,11 @@ class AnswerSubmissionServiceTest {
         val request = createSubmitAnswerRequest(selectedOptionId = correctOptionId)
         val game = createGame(gameId, GameStatus.ACTIVE, startedAt = Instant.now().minusSeconds(5))
         val question = createQuestion(questionId, gameId, index = 0, durationSeconds = 30, correctOptionId = correctOptionId, reward = BigDecimal("100.00"))
+        val activeQuestionResult = createActiveQuestionResult(questionId, Instant.now().plusSeconds(25))
 
         whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(questionRepository.findByGameIdOrderByIndex(gameId)).thenReturn(listOf(question))
+        whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
+        whenever(questionRepository.findById(questionId)).thenReturn(question)
         whenever(userQuestionAnswerRepository.findByUserIdAndGameIdAndQuestionId(any(), any(), any())).thenReturn(null)
         whenever(userQuestionAnswerRepository.findByUserIdAndGameId(any(), any())).thenReturn(emptyList())
         whenever(redisLeaderboardService.getUserQuestionRank(gameId, questionId, request.userId)).thenReturn(1)
@@ -159,9 +168,11 @@ class AnswerSubmissionServiceTest {
         val request = createSubmitAnswerRequest(selectedOptionId = correctOptionId)
         val game = createGame(gameId, GameStatus.ACTIVE, startedAt = Instant.now().minusSeconds(5))
         val question = createQuestion(questionId, gameId, index = 0, durationSeconds = 30, correctOptionId = correctOptionId, reward = BigDecimal("100.00"))
+        val activeQuestionResult = createActiveQuestionResult(questionId, Instant.now().plusSeconds(25))
 
         whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(questionRepository.findByGameIdOrderByIndex(gameId)).thenReturn(listOf(question))
+        whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
+        whenever(questionRepository.findById(questionId)).thenReturn(question)
         whenever(userQuestionAnswerRepository.findByUserIdAndGameIdAndQuestionId(any(), any(), any())).thenReturn(null)
         whenever(userQuestionAnswerRepository.findByUserIdAndGameId(any(), any())).thenReturn(emptyList())
         whenever(redisLeaderboardService.getUserQuestionRank(gameId, questionId, request.userId)).thenReturn(2) // Second place
@@ -191,9 +202,11 @@ class AnswerSubmissionServiceTest {
         val request = createSubmitAnswerRequest(selectedOptionId = wrongOptionId)
         val game = createGame(gameId, GameStatus.ACTIVE, startedAt = Instant.now().minusSeconds(5))
         val question = createQuestion(questionId, gameId, index = 0, durationSeconds = 30, correctOptionId = correctOptionId, reward = BigDecimal("100.00"))
+        val activeQuestionResult = createActiveQuestionResult(questionId, Instant.now().plusSeconds(25))
 
         whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(questionRepository.findByGameIdOrderByIndex(gameId)).thenReturn(listOf(question))
+        whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
+        whenever(questionRepository.findById(questionId)).thenReturn(question)
         whenever(userQuestionAnswerRepository.findByUserIdAndGameIdAndQuestionId(any(), any(), any())).thenReturn(null)
         whenever(turnRepository.save(any())).thenAnswer { it.arguments[0] }
         whenever(userQuestionAnswerRepository.save(any())).thenAnswer { it.arguments[0] }
@@ -256,5 +269,20 @@ class AnswerSubmissionServiceTest {
         reward = reward,
         durationSeconds = durationSeconds,
         createdAt = Instant.now()
+    )
+
+    private fun createActiveQuestionResult(
+        questionId: UUID,
+        expiresAt: Instant,
+        questionStartedAt: Instant? = Instant.now().minusSeconds(5)
+    ) = ActiveQuestionResult(
+        activeQuestion = QuestionTiming(
+            questionId = questionId,
+            orderIndex = 0,
+            durationSeconds = 30
+        ),
+        expiresAt = expiresAt,
+        isGameEnded = false,
+        questionStartedAt = questionStartedAt
     )
 }
