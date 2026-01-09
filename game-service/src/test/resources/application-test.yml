@@ -14,7 +14,7 @@ spring:
 
   cassandra:
     keyspace-name: game_platform
-    schema-action: create-if-not-exists
+    schema-action: none
     local-datacenter: datacenter1
 
   jpa:

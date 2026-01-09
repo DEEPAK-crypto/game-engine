@@ -27,7 +27,7 @@ class BudgetServiceImpl(
 
     private val log = LoggerFactory.getLogger(BudgetServiceImpl::class.java)
 
-    @Transactional(isolation = Isolation.SERIALIZABLE)
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     override fun allocateQuestionReward(gameId: UUID, questionId: UUID, amount: BigDecimal): Boolean {
         log.info(
             "Allocating question reward",
@@ -92,7 +92,7 @@ class BudgetServiceImpl(
         return true
     }
 
-    @Transactional(isolation = Isolation.SERIALIZABLE)
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     override fun awardToUser(gameId: UUID, userId: UUID, questionId: UUID, amount: BigDecimal) {
         log.info(
             "Awarding budget to user",

@@ -41,6 +41,9 @@ dependencies {
     testImplementation("org.testcontainers:cassandra:1.19.4")
     testImplementation("org.testcontainers:junit-jupiter:1.19.4")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+    testImplementation("it.ozimov:embedded-redis:0.7.3") {
+        exclude(group = "org.slf4j", module = "slf4j-simple")
+    }
 }
 
 tasks.bootJar {
