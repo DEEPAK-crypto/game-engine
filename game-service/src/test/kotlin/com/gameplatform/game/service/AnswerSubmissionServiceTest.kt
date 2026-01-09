@@ -34,6 +34,7 @@ class AnswerSubmissionServiceTest {
     private lateinit var gameMetrics: GameMetrics
     private lateinit var redisLeaderboardService: RedisLeaderboardService
     private lateinit var activeQuestionCacheService: ActiveQuestionCacheService
+    private lateinit var answerEvaluatorFactory: com.gameplatform.game.service.evaluation.AnswerEvaluatorFactory
 
     @BeforeEach
     fun setup() {
@@ -45,6 +46,7 @@ class AnswerSubmissionServiceTest {
         gameMetrics = mock()
         redisLeaderboardService = mock()
         activeQuestionCacheService = mock()
+        answerEvaluatorFactory = mock()
 
         answerSubmissionService = AnswerSubmissionServiceImpl(
             gameRepository,
@@ -54,7 +56,8 @@ class AnswerSubmissionServiceTest {
             budgetService,
             gameMetrics,
             redisLeaderboardService,
-            activeQuestionCacheService
+            activeQuestionCacheService,
+            answerEvaluatorFactory
         )
     }
 
@@ -135,6 +138,16 @@ class AnswerSubmissionServiceTest {
         val question = createQuestion(questionId, gameId, index = 0, durationSeconds = 30, correctOptionId = correctOptionId, reward = BigDecimal("100.00"))
         val activeQuestionResult = createActiveQuestionResult(questionId, Instant.now().plusSeconds(25))
 
+        // Mock evaluator
+        val mockEvaluator: com.gameplatform.game.service.evaluation.AnswerEvaluator = mock()
+        val rewardResult = com.gameplatform.game.service.evaluation.RewardEvaluationResult(
+            shouldAwardReward = true,
+            rewardAmount = BigDecimal("100.00")
+        )
+        whenever(answerEvaluatorFactory.getEvaluator(GameType.MCQ_FIFO)).thenReturn(mockEvaluator)
+        whenever(mockEvaluator.isAnswerCorrect(any(), any())).thenReturn(true)
+        whenever(mockEvaluator.calculateReward(any(), any())).thenReturn(rewardResult)
+
         whenever(gameRepository.findById(gameId)).thenReturn(game)
         whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
         whenever(questionRepository.findById(questionId)).thenReturn(question)
@@ -170,6 +183,16 @@ class AnswerSubmissionServiceTest {
         val question = createQuestion(questionId, gameId, index = 0, durationSeconds = 30, correctOptionId = correctOptionId, reward = BigDecimal("100.00"))
         val activeQuestionResult = createActiveQuestionResult(questionId, Instant.now().plusSeconds(25))
 
+        // Mock evaluator
+        val mockEvaluator: com.gameplatform.game.service.evaluation.AnswerEvaluator = mock()
+        val rewardResult = com.gameplatform.game.service.evaluation.RewardEvaluationResult(
+            shouldAwardReward = false,
+            rewardAmount = BigDecimal.ZERO
+        )
+        whenever(answerEvaluatorFactory.getEvaluator(GameType.MCQ_FIFO)).thenReturn(mockEvaluator)
+        whenever(mockEvaluator.isAnswerCorrect(any(), any())).thenReturn(true)
+        whenever(mockEvaluator.calculateReward(any(), any())).thenReturn(rewardResult)
+
         whenever(gameRepository.findById(gameId)).thenReturn(game)
         whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
         whenever(questionRepository.findById(questionId)).thenReturn(question)
@@ -203,6 +226,11 @@ class AnswerSubmissionServiceTest {
         val game = createGame(gameId, GameStatus.ACTIVE, startedAt = Instant.now().minusSeconds(5))
         val question = createQuestion(questionId, gameId, index = 0, durationSeconds = 30, correctOptionId = correctOptionId, reward = BigDecimal("100.00"))
         val activeQuestionResult = createActiveQuestionResult(questionId, Instant.now().plusSeconds(25))
+
+        // Mock evaluator
+        val mockEvaluator: com.gameplatform.game.service.evaluation.AnswerEvaluator = mock()
+        whenever(answerEvaluatorFactory.getEvaluator(GameType.MCQ_FIFO)).thenReturn(mockEvaluator)
+        whenever(mockEvaluator.isAnswerCorrect(any(), any())).thenReturn(false)
 
         whenever(gameRepository.findById(gameId)).thenReturn(game)
         whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)

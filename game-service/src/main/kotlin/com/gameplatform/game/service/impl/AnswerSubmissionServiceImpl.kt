@@ -30,7 +30,8 @@ class AnswerSubmissionServiceImpl(
     private val budgetService: BudgetService,
     private val gameMetrics: GameMetrics,
     private val redisLeaderboardService: RedisLeaderboardService,
-    private val activeQuestionCacheService: com.gameplatform.game.service.ActiveQuestionCacheService
+    private val activeQuestionCacheService: com.gameplatform.game.service.ActiveQuestionCacheService,
+    private val answerEvaluatorFactory: com.gameplatform.game.service.evaluation.AnswerEvaluatorFactory
 ) : AnswerSubmissionService {
 
     private val log = LoggerFactory.getLogger(AnswerSubmissionServiceImpl::class.java)
@@ -115,56 +116,62 @@ class AnswerSubmissionServiceImpl(
         // Note: In a production system, we'd fetch and validate the option
         // For now, we assume the client sends valid option IDs
 
-        // 6. Check if answer is correct
-        val isCorrect = activeQuestion.correctOptionId == request.selectedOptionId
+        // 6. Get the appropriate evaluator for this game type
+        val evaluator = answerEvaluatorFactory.getEvaluator(game.gameType)
 
         log.debug(
-            "Answer correctness determined",
+            "Using evaluator for game type",
             kv("gameId", gameId),
-            kv("userId", request.userId),
-            kv("questionId", activeQuestion.id),
-            kv("isCorrect", isCorrect)
+            kv("gameType", game.gameType),
+            kv("evaluatorClass", evaluator::class.simpleName)
         )
 
-        // Record metrics for answer submission
-        gameMetrics.recordAnswerSubmission(isCorrect, gameId, activeQuestion.id)
+        // 7. Evaluate answer for correctness
+        val isCorrect = evaluator.isAnswerCorrect(activeQuestion, request)
 
-        // 7. Determine reward amount
         var rewardAmount = BigDecimal.ZERO
         var rank: Int? = null
 
+        // 8. Only add correct answers to leaderboard and determine reward
         if (isCorrect) {
-            // First correct answer gets the reward
-            // We need to add to leaderboard before checking rank to ensure atomicity
+            // Add to leaderboard to establish ranking
             redisLeaderboardService.addToQuestionLeaderboard(
                 gameId = gameId,
                 questionId = activeQuestion.id,
                 userId = request.userId,
-                rewardAmount = BigDecimal.ZERO, // Add to leaderboard first with zero reward
+                rewardAmount = BigDecimal.ZERO, // Add with zero reward initially
                 answeredAt = serverTimestamp
             )
 
             // Get user's rank after adding to leaderboard
             rank = redisLeaderboardService.getUserQuestionRank(gameId, activeQuestion.id, request.userId)
+                ?: throw IllegalStateException("User should be in leaderboard after adding")
+
+            // Calculate reward based on rank
+            val rewardResult = evaluator.calculateReward(activeQuestion, rank)
+            rewardAmount = rewardResult.rewardAmount
 
             log.debug(
                 "Correct answer received",
                 kv("gameId", gameId),
                 kv("userId", request.userId),
                 kv("questionId", activeQuestion.id),
-                kv("rank", rank)
+                kv("rank", rank),
+                kv("shouldAwardReward", rewardResult.shouldAwardReward),
+                kv("rewardAmount", rewardAmount)
             )
 
-            // Award reward to first correct answer
-            if (rank == 1) {
-                rewardAmount = activeQuestion.reward
+            // Award reward if determined by evaluator
+            if (rewardResult.shouldAwardReward) {
                 budgetService.awardToUser(gameId, request.userId, activeQuestion.id, rewardAmount)
 
                 log.info(
-                    "Reward awarded for first correct answer",
+                    "Reward awarded based on game rules",
                     kv("gameId", gameId),
                     kv("userId", request.userId),
                     kv("questionId", activeQuestion.id),
+                    kv("gameType", game.gameType),
+                    kv("rank", rank),
                     kv("rewardAmount", rewardAmount)
                 )
 
@@ -181,7 +188,6 @@ class AnswerSubmissionServiceImpl(
             }
 
             // Update user's total reward in game leaderboard
-            // Get user's current total reward
             val userTotalReward = userQuestionAnswerRepository
                 .findByUserIdAndGameId(request.userId, gameId)
                 .sumOf { it.rewardAmount } + rewardAmount
@@ -194,7 +200,21 @@ class AnswerSubmissionServiceImpl(
             )
         }
 
-        // 8. Save turn (FIFO ordering)
+        // 9. Record metrics for answer submission
+        gameMetrics.recordAnswerSubmission(isCorrect, gameId, activeQuestion.id)
+
+        log.debug(
+            "Answer evaluation completed",
+            kv("gameId", gameId),
+            kv("userId", request.userId),
+            kv("questionId", activeQuestion.id),
+            kv("gameType", game.gameType),
+            kv("isCorrect", isCorrect),
+            kv("rank", rank),
+            kv("rewardAmount", rewardAmount)
+        )
+
+        // 10. Save turn (FIFO ordering)
         val turnId = UUID.randomUUID()
         val turn = Turn(
             gameId = gameId,
@@ -210,7 +230,7 @@ class AnswerSubmissionServiceImpl(
         )
         turnRepository.save(turn)
 
-        // 9. Save user question answer
+        // 12. Save user question answer
         val userAnswer = UserQuestionAnswer(
             userId = request.userId,
             gameId = gameId,
