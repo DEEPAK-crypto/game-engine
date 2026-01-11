@@ -95,15 +95,23 @@ class AnswerSubmissionServiceImpl(
             throw AnswerSubmissionClosedException(activeQuestion.id)
         }
 
-        // 4. Check for duplicate answer
-        val existingAnswer = userQuestionAnswerRepository.findByUserIdAndGameIdAndQuestionId(
-            request.userId,
-            gameId,
-            activeQuestion.id
+        // 4. Atomically claim answer slot using Cassandra LWT (INSERT IF NOT EXISTS)
+        // This prevents race condition where concurrent requests could both pass a SELECT check
+        val turnId = UUID.randomUUID()
+        val inserted = userQuestionAnswerRepository.insertIfNotExists(
+            userId = request.userId,
+            gameId = gameId,
+            questionId = activeQuestion.id,
+            turnId = turnId,
+            selectedOptionId = request.selectedOptionId,
+            isCorrect = false,  // Placeholder, will update after evaluation
+            rewardAmount = BigDecimal.ZERO,  // Placeholder, will update after evaluation
+            answeredAt = serverTimestamp
         )
-        if (existingAnswer != null) {
+
+        if (!inserted) {
             log.warn(
-                "Duplicate answer submission attempt",
+                "Duplicate answer submission attempt (LWT rejected)",
                 kv("gameId", gameId),
                 kv("userId", request.userId),
                 kv("questionId", activeQuestion.id)
@@ -111,6 +119,14 @@ class AnswerSubmissionServiceImpl(
             gameMetrics.recordDuplicateAnswer()
             throw DuplicateAnswerException(request.userId, activeQuestion.id)
         }
+
+        log.debug(
+            "Answer slot claimed via LWT",
+            kv("gameId", gameId),
+            kv("userId", request.userId),
+            kv("questionId", activeQuestion.id),
+            kv("turnId", turnId)
+        )
 
         // 5. Validate option belongs to this question
         // Note: In a production system, we'd fetch and validate the option
@@ -218,7 +234,6 @@ class AnswerSubmissionServiceImpl(
         )
 
         // 10. Save turn (FIFO ordering)
-        val turnId = UUID.randomUUID()
         val turn = Turn(
             gameId = gameId,
             questionId = activeQuestion.id,
@@ -233,7 +248,8 @@ class AnswerSubmissionServiceImpl(
         )
         turnRepository.save(turn)
 
-        // 12. Save user question answer
+        // 11. Update user question answer with final evaluation results
+        // The record was already inserted via LWT in step 4, now we update with final values
         val userAnswer = UserQuestionAnswer(
             userId = request.userId,
             gameId = gameId,

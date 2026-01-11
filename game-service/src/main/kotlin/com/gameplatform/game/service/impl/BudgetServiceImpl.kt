@@ -2,7 +2,6 @@ package com.gameplatform.game.service.impl
 
 import com.gameplatform.game.domain.enums.TransactionType
 import com.gameplatform.game.domain.model.BudgetTransaction
-import com.gameplatform.game.exception.BudgetAllocationException
 import com.gameplatform.game.exception.GameNotFoundException
 import com.gameplatform.game.exception.InsufficientBudgetException
 import com.gameplatform.game.metrics.GameMetrics
@@ -36,33 +35,25 @@ class BudgetServiceImpl(
             kv("amount", amount)
         )
 
-        val game = gameRepository.findById(gameId)
-            ?: run {
+        // Atomic deduction - single UPDATE with WHERE clause checking budget
+        // This prevents race conditions in multi-instance deployments
+        val newBudget = gameRepository.deductBudgetAtomic(gameId, amount)
+
+        if (newBudget == null) {
+            // Either game not found or insufficient budget
+            val game = gameRepository.findById(gameId)
+            if (game == null) {
                 log.warn("Game not found for budget allocation", kv("gameId", gameId))
                 throw GameNotFoundException(gameId)
             }
-
-        if (game.remainingBudget < amount) {
             log.warn(
-                "Insufficient budget for question reward allocation",
+                "Insufficient budget for question reward allocation (atomic check failed)",
                 kv("gameId", gameId),
                 kv("questionId", questionId),
                 kv("requestedAmount", amount),
                 kv("remainingBudget", game.remainingBudget)
             )
             return false
-        }
-
-        val newBudget = game.remainingBudget - amount
-        val success = gameRepository.updateRemainingBudget(gameId, newBudget)
-
-        if (!success) {
-            log.error(
-                "Failed to update remaining budget",
-                kv("gameId", gameId),
-                kv("questionId", questionId)
-            )
-            throw BudgetAllocationException("Failed to allocate budget for question $questionId")
         }
 
         val transaction = BudgetTransaction(
@@ -80,7 +71,7 @@ class BudgetServiceImpl(
         budgetTransactionRepository.save(transaction)
 
         log.info(
-            "Question reward allocated successfully",
+            "Question reward allocated successfully (atomic)",
             kv("gameId", gameId),
             kv("questionId", questionId),
             kv("amount", amount),
@@ -102,15 +93,19 @@ class BudgetServiceImpl(
             kv("amount", amount)
         )
 
-        val game = gameRepository.findById(gameId)
-            ?: run {
+        // Atomic deduction - single UPDATE with WHERE clause checking budget
+        // This prevents race conditions in multi-instance deployments
+        val newBudget = gameRepository.deductBudgetAtomic(gameId, amount)
+
+        if (newBudget == null) {
+            // Either game not found or insufficient budget
+            val game = gameRepository.findById(gameId)
+            if (game == null) {
                 log.warn("Game not found for user award", kv("gameId", gameId))
                 throw GameNotFoundException(gameId)
             }
-
-        if (game.remainingBudget < amount) {
             log.error(
-                "Insufficient budget for user award",
+                "Insufficient budget for user award (atomic check failed)",
                 kv("gameId", gameId),
                 kv("userId", userId),
                 kv("requestedAmount", amount),
@@ -121,18 +116,6 @@ class BudgetServiceImpl(
                 amount.toString(),
                 game.remainingBudget.toString()
             )
-        }
-
-        val newBudget = game.remainingBudget - amount
-        val success = gameRepository.updateRemainingBudget(gameId, newBudget)
-
-        if (!success) {
-            log.error(
-                "Failed to update budget for user award",
-                kv("gameId", gameId),
-                kv("userId", userId)
-            )
-            throw BudgetAllocationException("Failed to award budget to user $userId")
         }
 
         val transaction = BudgetTransaction(
@@ -150,7 +133,7 @@ class BudgetServiceImpl(
         budgetTransactionRepository.save(transaction)
 
         log.info(
-            "Budget awarded to user successfully",
+            "Budget awarded to user successfully (atomic)",
             kv("gameId", gameId),
             kv("userId", userId),
             kv("questionId", questionId),

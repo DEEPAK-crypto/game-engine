@@ -14,4 +14,17 @@ interface GameRepository {
     fun updateStatus(id: UUID, status: GameStatus, timestamp: Instant): Boolean
     fun updateRemainingBudget(id: UUID, newBudget: BigDecimal): Boolean
     fun delete(id: UUID): Boolean
+
+    /**
+     * Atomically deducts an amount from the game's remaining budget.
+     *
+     * This operation is safe for concurrent access across multiple instances.
+     * It uses a single UPDATE statement with a WHERE clause that checks
+     * the budget is sufficient, preventing race conditions.
+     *
+     * @param id The game ID
+     * @param amount The amount to deduct
+     * @return The new remaining budget if successful, null if insufficient funds or game not found
+     */
+    fun deductBudgetAtomic(id: UUID, amount: BigDecimal): BigDecimal?
 }

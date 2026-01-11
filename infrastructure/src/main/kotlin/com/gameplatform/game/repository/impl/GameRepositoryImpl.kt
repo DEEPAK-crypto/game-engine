@@ -81,6 +81,21 @@ class GameRepositoryImpl(private val dsl: DSLContext) : GameRepository {
         return updated > 0
     }
 
+    override fun deductBudgetAtomic(id: UUID, amount: BigDecimal): BigDecimal? {
+        // Single atomic UPDATE that checks and deducts in one operation
+        // This prevents race conditions in multi-instance deployments
+        // The WHERE clause ensures we only deduct if sufficient budget exists
+        val result = dsl.update(GAMES)
+            .set(GAMES.REMAINING_BUDGET, GAMES.REMAINING_BUDGET.minus(amount))
+            .set(GAMES.UPDATED_AT, Instant.now().toLocalDateTime())
+            .where(GAMES.ID.eq(id))
+            .and(GAMES.REMAINING_BUDGET.greaterOrEqual(amount))
+            .returningResult(GAMES.REMAINING_BUDGET)
+            .fetchOne()
+
+        return result?.value1()
+    }
+
     override fun delete(id: UUID): Boolean {
         val deleted = dsl.deleteFrom(GAMES)
             .where(GAMES.ID.eq(id))

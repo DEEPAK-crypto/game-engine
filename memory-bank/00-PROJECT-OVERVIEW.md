@@ -99,6 +99,8 @@ game-engine/
 - ✅ Load testing framework
 - ✅ Factory pattern for game types
 - ✅ Atomic winner slot claiming (Lua script - prevents race conditions)
+- ✅ Atomic budget deduction (prevents over-allocation)
+- ✅ Duplicate answer prevention (Cassandra LWT)
 - ✅ Graceful shutdown support
 - 🚧 MCQ_FASTEST implementation
 - 🚧 WebSocket for real-time updates

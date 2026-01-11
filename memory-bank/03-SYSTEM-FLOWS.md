@@ -295,26 +295,45 @@ if (serverTimestamp > activeResult.expiresAt) {
 
 ---
 
-#### **Step 5: Check Duplicate Answer**
+#### **Step 4: Atomic Duplicate Check via Cassandra LWT**
 ```kotlin
-val existingAnswer = userQuestionAnswerRepository
-  .findByUserIdAndGameIdAndQuestionId(userId, gameId, questionId)
+val turnId = UUID.randomUUID()
 
-if (existingAnswer != null) {
-  gameMetrics.recordDuplicateAnswer()
-  throw DuplicateAnswerException(userId, questionId)
+// LWT INSERT - atomically claims answer slot
+val inserted = userQuestionAnswerRepository.insertIfNotExists(
+    userId = request.userId,
+    gameId = gameId,
+    questionId = activeQuestion.id,
+    turnId = turnId,
+    selectedOptionId = request.selectedOptionId,
+    isCorrect = false,      // Placeholder
+    rewardAmount = BigDecimal.ZERO,  // Placeholder
+    answeredAt = serverTimestamp
+)
+
+if (!inserted) {
+    gameMetrics.recordDuplicateAnswer()
+    throw DuplicateAnswerException(userId, questionId)
 }
 ```
 
-**Cassandra Query**:
+**Cassandra LWT Query**:
 ```cql
-SELECT * FROM user_question_answers
-WHERE user_id = ? AND game_id = ? AND question_id = ?
+INSERT INTO user_question_answers
+(user_id, game_id, question_id, turn_id, selected_option_id, is_correct, reward_amount, answered_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+IF NOT EXISTS
 ```
+
+**Why LWT instead of SELECT?**
+- SELECT then INSERT has race condition under concurrent load
+- LWT is atomic: check + insert in single operation
+- Returns `[applied: false]` if record already exists
+- ~10-20ms latency (Paxos consensus) but guarantees correctness
 
 ---
 
-#### **Step 6: Get Evaluator (Factory Pattern)**
+#### **Step 5: Get Evaluator (Factory Pattern)**
 ```kotlin
 val evaluator = answerEvaluatorFactory.getEvaluator(game.gameType)
 // Returns: McqFifoAnswerEvaluator for MCQ_FIFO

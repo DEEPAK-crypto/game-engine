@@ -292,6 +292,68 @@ return {rank, 0, winnerCount}  -- Slot already taken
 - `GracefulShutdownFilter` tracks active requests
 - Returns 503 with `Retry-After` header for new requests during shutdown
 
+### 8. **Atomic Budget Deduction**
+**Decision**: Use atomic SQL UPDATE for budget deduction
+
+**Problem**:
+In a multi-instance deployment, concurrent requests could over-allocate budget:
+1. Instance A: Read budget = $100
+2. Instance B: Read budget = $100
+3. Instance A: Check $100 >= $50 ✓, deduct → $50
+4. Instance B: Check $100 >= $50 ✓, deduct → $50
+5. Result: $100 awarded but budget only shows $50 deducted
+
+**Solution**:
+Single atomic UPDATE with WHERE clause:
+```sql
+UPDATE games
+SET remaining_budget = remaining_budget - :amount,
+    updated_at = NOW()
+WHERE id = :gameId
+  AND remaining_budget >= :amount
+RETURNING remaining_budget
+```
+
+**Why Atomic UPDATE?**:
+- No read-then-write race condition
+- Database guarantees atomicity
+- Simple, no distributed locks needed
+- Returns null if insufficient budget (condition not met)
+
+**Trade-off**: Slightly less informative error (need extra read to get current budget)
+
+### 9. **Cassandra LWT for Duplicate Prevention**
+**Decision**: Use Cassandra Lightweight Transactions (INSERT IF NOT EXISTS) for duplicate answer prevention
+
+**Problem**:
+Under concurrent load, same user could submit multiple answers:
+1. Request A: SELECT → no record found
+2. Request B: SELECT → no record found
+3. Request A: INSERT answer
+4. Request B: INSERT answer (Cassandra upsert overwrites!)
+
+**Solution**:
+Use LWT to atomically claim the answer slot:
+```cql
+INSERT INTO user_question_answers (user_id, game_id, question_id, ...)
+VALUES (?, ?, ?, ...)
+IF NOT EXISTS
+```
+
+**Flow**:
+1. LWT INSERT with placeholder data (isCorrect=false, reward=0)
+2. If returns false → duplicate, reject immediately
+3. If returns true → slot claimed, process answer
+4. UPDATE record with final evaluation results
+
+**Why LWT?**:
+- Atomic check-and-insert at database level
+- Works across all application instances
+- ~10-20ms latency (Paxos consensus) but acceptable for this use case
+- No additional infrastructure needed
+
+**Trade-off**: Higher latency than simple INSERT, but guarantees correctness
+
 ## Scalability Considerations
 
 ### Horizontal Scaling
