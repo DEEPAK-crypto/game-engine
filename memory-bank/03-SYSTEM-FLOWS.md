@@ -334,50 +334,61 @@ val isCorrect = evaluator.isAnswerCorrect(activeQuestion, request)
 
 ---
 
-#### **Step 8: If Correct, Add to Leaderboard**
+#### **Step 8: If Correct, Atomic Leaderboard + Winner Slot Claim**
 ```kotlin
 if (isCorrect) {
-  // Add to question leaderboard (with zero reward initially)
-  redisLeaderboardService.addToQuestionLeaderboard(
+  // Atomically: add to leaderboard, get rank, claim winner slot
+  // Uses Lua script to prevent race conditions
+  val claimResult = redisLeaderboardService.addToLeaderboardAndClaimWinnerSlot(
     gameId, questionId, userId,
-    rewardAmount = BigDecimal.ZERO,
-    answeredAt = serverTimestamp
+    answeredAt = serverTimestamp,
+    maxWinners = evaluator.getMaxWinners()  // 1 for MCQ_FIFO
   )
 
-  // Get rank
-  rank = redisLeaderboardService.getUserQuestionRank(gameId, questionId, userId)
+  rank = claimResult.rank
+  shouldAwardReward = claimResult.claimedWinnerSlot
 }
 ```
 
-**Redis Operations**:
-```redis
-# Calculate score
-score = (0 * 1e10) + (MAX_TIMESTAMP - answeredAt.epochMicros)
+**Redis Lua Script** (`claim_winner_slot.lua`):
+```lua
+-- KEYS[1] = leaderboard sorted set
+-- KEYS[2] = winners set
+-- ARGV[1] = userId, ARGV[2] = score, ARGV[3] = maxWinners
 
-# Add to sorted set
-ZADD leaderboard:question:{gameId}:{questionId} {score} {userId}
+-- Step 1: Add to leaderboard
+redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
 
-# Get rank (1-indexed)
-ZREVRANK leaderboard:question:{gameId}:{questionId} {userId}
+-- Step 2: Get rank (0-indexed)
+local rank = redis.call('ZREVRANK', KEYS[1], ARGV[1]) + 1
+
+-- Step 3: Try to claim winner slot (atomic!)
+local winnerCount = redis.call('SCARD', KEYS[2])
+if rank <= maxWinners and winnerCount < maxWinners then
+    local added = redis.call('SADD', KEYS[2], ARGV[1])
+    if added == 1 then
+        return {rank, 1, winnerCount + 1}  -- Claimed!
+    end
+end
+return {rank, 0, winnerCount}  -- Not claimed
 ```
+
+**Why Atomic?**
+- Prevents race condition where two users both see rank 1
+- Only one user can SADD to winners set
+- Guarantees exactly N winners even with 10K concurrent users
 
 ---
 
 #### **Step 9: Calculate Reward**
 ```kotlin
 if (isCorrect) {
-  val rewardResult = evaluator.calculateReward(activeQuestion, rank!!)
-  rewardAmount = rewardResult.rewardAmount
-  shouldAwardReward = rewardResult.shouldAwardReward
+  // Reward is based on whether winner slot was claimed (not rank)
+  rewardAmount = if (shouldAwardReward) activeQuestion.reward else BigDecimal.ZERO
 }
 ```
 
-**McqFifoAnswerEvaluator Logic**:
-```kotlin
-// Only first N correct answers win (N=1 currently)
-val shouldAwardReward = userRank <= WINNER_COUNT
-val rewardAmount = if (shouldAwardReward) question.reward else BigDecimal.ZERO
-```
+**Note**: The Lua script handles the "first N winners" logic atomically, so we don't rely on rank-based calculation which would be racy.
 
 ---
 

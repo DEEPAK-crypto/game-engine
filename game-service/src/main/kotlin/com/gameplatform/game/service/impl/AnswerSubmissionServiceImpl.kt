@@ -134,39 +134,42 @@ class AnswerSubmissionServiceImpl(
 
         // 8. Only add correct answers to leaderboard and determine reward
         if (isCorrect) {
-            // Add to leaderboard to establish ranking
-            redisLeaderboardService.addToQuestionLeaderboard(
+            // Get max winners from evaluator (for MCQ_FIFO this is 1)
+            val maxWinners = evaluator.getMaxWinners()
+
+            // Atomically add to leaderboard and claim winner slot
+            // This prevents race conditions where two users could both see rank 1
+            val claimResult = redisLeaderboardService.addToLeaderboardAndClaimWinnerSlot(
                 gameId = gameId,
                 questionId = activeQuestion.id,
                 userId = request.userId,
-                rewardAmount = BigDecimal.ZERO, // Add with zero reward initially
-                answeredAt = serverTimestamp
+                answeredAt = serverTimestamp,
+                maxWinners = maxWinners
             )
 
-            // Get user's rank after adding to leaderboard
-            rank = redisLeaderboardService.getUserQuestionRank(gameId, activeQuestion.id, request.userId)
-                ?: throw IllegalStateException("User should be in leaderboard after adding")
+            rank = claimResult.rank
+            val shouldAwardReward = claimResult.claimedWinnerSlot
 
-            // Calculate reward based on rank
-            val rewardResult = evaluator.calculateReward(activeQuestion, rank)
-            rewardAmount = rewardResult.rewardAmount
+            // Calculate reward amount (only non-zero if we claimed a winner slot)
+            rewardAmount = if (shouldAwardReward) activeQuestion.reward else BigDecimal.ZERO
 
             log.debug(
-                "Correct answer received",
+                "Correct answer received (atomic claim)",
                 kv("gameId", gameId),
                 kv("userId", request.userId),
                 kv("questionId", activeQuestion.id),
                 kv("rank", rank),
-                kv("shouldAwardReward", rewardResult.shouldAwardReward),
+                kv("claimedWinnerSlot", shouldAwardReward),
+                kv("currentWinnerCount", claimResult.currentWinnerCount),
                 kv("rewardAmount", rewardAmount)
             )
 
-            // Award reward if determined by evaluator
-            if (rewardResult.shouldAwardReward) {
+            // Award reward if winner slot was claimed atomically
+            if (shouldAwardReward) {
                 budgetService.awardToUser(gameId, request.userId, activeQuestion.id, rewardAmount)
 
                 log.info(
-                    "Reward awarded based on game rules",
+                    "Reward awarded (atomic winner slot claimed)",
                     kv("gameId", gameId),
                     kv("userId", request.userId),
                     kv("questionId", activeQuestion.id),

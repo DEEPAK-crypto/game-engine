@@ -40,6 +40,15 @@ interface AnswerEvaluator {
         question: Question,
         userRank: Int
     ): RewardEvaluationResult
+
+    /**
+     * Returns the maximum number of winners for this game type.
+     * This is used by the atomic leaderboard operation to determine
+     * how many winner slots are available.
+     *
+     * @return The maximum number of winners that can receive rewards
+     */
+    fun getMaxWinners(): Int
 }
 
 /**

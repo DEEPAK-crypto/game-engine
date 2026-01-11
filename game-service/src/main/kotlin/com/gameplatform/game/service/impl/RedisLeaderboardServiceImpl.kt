@@ -2,10 +2,14 @@ package com.gameplatform.game.service.impl
 
 import com.gameplatform.game.dto.GameLeaderboardEntry
 import com.gameplatform.game.dto.QuestionLeaderboardEntry
+import com.gameplatform.game.service.LeaderboardClaimResult
 import com.gameplatform.game.service.RedisLeaderboardService
+import jakarta.annotation.PostConstruct
 import net.logstash.logback.argument.StructuredArguments.kv
 import org.slf4j.LoggerFactory
+import org.springframework.core.io.ClassPathResource
 import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.time.Instant
@@ -18,15 +22,27 @@ class RedisLeaderboardServiceImpl(
 
     private val log = LoggerFactory.getLogger(RedisLeaderboardServiceImpl::class.java)
 
+    private lateinit var claimWinnerSlotScript: DefaultRedisScript<List<Long>>
+
     companion object {
         private const val QUESTION_LEADERBOARD_PREFIX = "leaderboard:question"
         private const val GAME_LEADERBOARD_PREFIX = "leaderboard:game"
+        private const val WINNERS_PREFIX = "winners"
 
         // Multiplier for reward amount to preserve precision in scores
         private const val REWARD_MULTIPLIER = 1_000_000_000_000.0 // 1e12
 
         // Maximum timestamp value for calculating tie-breaker
         private const val MAX_TIMESTAMP_MICROS = 9_999_999_999_999_999L
+    }
+
+    @PostConstruct
+    fun init() {
+        claimWinnerSlotScript = DefaultRedisScript()
+        claimWinnerSlotScript.setLocation(ClassPathResource("redis/claim_winner_slot.lua"))
+        @Suppress("UNCHECKED_CAST")
+        claimWinnerSlotScript.setResultType(List::class.java as Class<List<Long>>)
+        log.info("Loaded Lua script for atomic winner slot claiming")
     }
 
     override fun addToQuestionLeaderboard(
@@ -223,5 +239,73 @@ class RedisLeaderboardServiceImpl(
 
     private fun getGameLeaderboardKey(gameId: UUID): String {
         return "$GAME_LEADERBOARD_PREFIX:$gameId"
+    }
+
+    private fun getWinnersKey(gameId: UUID, questionId: UUID): String {
+        return "$WINNERS_PREFIX:$gameId:$questionId"
+    }
+
+    override fun addToLeaderboardAndClaimWinnerSlot(
+        gameId: UUID,
+        questionId: UUID,
+        userId: UUID,
+        answeredAt: Instant,
+        maxWinners: Int
+    ): LeaderboardClaimResult {
+        val leaderboardKey = getQuestionLeaderboardKey(gameId, questionId)
+        val winnersKey = getWinnersKey(gameId, questionId)
+
+        // Calculate score for FIFO ordering (earlier timestamp = higher score)
+        // Using zero reward since this is for ranking purposes only
+        val score = calculateScore(BigDecimal.ZERO, answeredAt)
+
+        log.debug(
+            "Executing atomic leaderboard claim",
+            kv("gameId", gameId),
+            kv("questionId", questionId),
+            kv("userId", userId),
+            kv("score", score),
+            kv("maxWinners", maxWinners)
+        )
+
+        val keys = listOf(leaderboardKey, winnersKey)
+        val args = arrayOf(userId.toString(), score.toString(), maxWinners.toString())
+
+        @Suppress("UNCHECKED_CAST")
+        val result = redisTemplate.execute(
+            claimWinnerSlotScript,
+            keys,
+            *args
+        ) as List<Long>
+
+        val rank = result[0].toInt()
+        val claimedSlot = result[1] == 1L
+        val currentWinnerCount = result[2].toInt()
+
+        log.debug(
+            "Atomic leaderboard claim result",
+            kv("gameId", gameId),
+            kv("questionId", questionId),
+            kv("userId", userId),
+            kv("rank", rank),
+            kv("claimedSlot", claimedSlot),
+            kv("currentWinnerCount", currentWinnerCount)
+        )
+
+        return LeaderboardClaimResult(
+            rank = rank,
+            claimedWinnerSlot = claimedSlot,
+            currentWinnerCount = currentWinnerCount
+        )
+    }
+
+    override fun clearQuestionWinners(gameId: UUID, questionId: UUID) {
+        val key = getWinnersKey(gameId, questionId)
+        log.info(
+            "Clearing question winners from Redis",
+            kv("gameId", gameId),
+            kv("questionId", questionId)
+        )
+        redisTemplate.delete(key)
     }
 }

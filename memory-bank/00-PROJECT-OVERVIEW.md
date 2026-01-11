@@ -98,6 +98,8 @@ game-engine/
 - ✅ Real-time leaderboards
 - ✅ Load testing framework
 - ✅ Factory pattern for game types
+- ✅ Atomic winner slot claiming (Lua script - prevents race conditions)
+- ✅ Graceful shutdown support
 - 🚧 MCQ_FASTEST implementation
 - 🚧 WebSocket for real-time updates
 - 🚧 User authentication

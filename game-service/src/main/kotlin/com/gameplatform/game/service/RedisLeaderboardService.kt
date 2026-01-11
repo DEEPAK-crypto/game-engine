@@ -7,6 +7,19 @@ import java.time.Instant
 import java.util.*
 
 /**
+ * Result of an atomic leaderboard entry and winner slot claim operation.
+ *
+ * @property rank The user's rank on the leaderboard (1-indexed)
+ * @property claimedWinnerSlot True if the user successfully claimed a winner slot
+ * @property currentWinnerCount Total number of winners who have claimed slots
+ */
+data class LeaderboardClaimResult(
+    val rank: Int,
+    val claimedWinnerSlot: Boolean,
+    val currentWinnerCount: Int
+)
+
+/**
  * Service for managing real-time leaderboards using Redis sorted sets.
  *
  * Redis sorted sets provide O(log N) complexity for updates and range queries,
@@ -120,4 +133,39 @@ interface RedisLeaderboardService {
      * @param gameId The game ID
      */
     fun clearGameLeaderboard(gameId: UUID)
+
+    /**
+     * Atomically adds a user to the question leaderboard and attempts to claim a winner slot.
+     *
+     * This operation uses a Lua script to ensure atomicity across:
+     * 1. Adding the user to the leaderboard
+     * 2. Getting their rank
+     * 3. Claiming a winner slot (if eligible and slots available)
+     *
+     * This prevents race conditions where two users could both see rank 1 and both
+     * claim rewards in a distributed multi-instance deployment.
+     *
+     * @param gameId The game ID
+     * @param questionId The question ID
+     * @param userId The user ID
+     * @param answeredAt The timestamp when the answer was submitted (used for FIFO ordering)
+     * @param maxWinners Maximum number of winners allowed for this question
+     * @return LeaderboardClaimResult containing rank and whether winner slot was claimed
+     */
+    fun addToLeaderboardAndClaimWinnerSlot(
+        gameId: UUID,
+        questionId: UUID,
+        userId: UUID,
+        answeredAt: Instant,
+        maxWinners: Int
+    ): LeaderboardClaimResult
+
+    /**
+     * Clears the winners set for a question.
+     * Should be called when a question ends or game is reset.
+     *
+     * @param gameId The game ID
+     * @param questionId The question ID
+     */
+    fun clearQuestionWinners(gameId: UUID, questionId: UUID)
 }

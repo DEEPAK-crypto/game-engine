@@ -52,4 +52,6 @@ class McqFifoAnswerEvaluator : AnswerEvaluator {
             rewardAmount = rewardAmount
         )
     }
+
+    override fun getMaxWinners(): Int = WINNER_COUNT
 }

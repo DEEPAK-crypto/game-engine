@@ -125,14 +125,24 @@
   - Score: Combined (reward * 1e10) + timestamp
   - O(log N) updates, O(log N) rank queries
 
+- **Sets** (Winner Tracking):
+  - Key: `winners:{gameId}:{questionId}`
+  - Members: userIds who claimed winner slots
+  - Used by Lua script for atomic winner slot claiming
+
 - **Strings** (Cache):
   - Key: `active_question:{gameId}`
   - Value: JSON of active question timing
   - TTL: Question duration
 
+**Lua Scripts**:
+- `claim_winner_slot.lua` - Atomic leaderboard entry + winner slot claim
+  - Prevents race conditions in distributed deployments
+  - Located at: `game-service/src/main/resources/redis/`
+
 **Characteristics**:
 - Sub-millisecond reads
-- Atomic operations
+- Atomic operations via Lua scripts
 - Built-in sorted sets for rankings
 - Connection pool: 100 connections
 - Max memory: 1GB (LRU eviction)
@@ -235,6 +245,52 @@ class AnswerSubmissionServiceImpl : AnswerSubmissionService {
 - Time-series optimized storage
 
 **Schema**: Partition by (user_id, game_id), cluster by question_id
+
+### 6. **Lua Script for Atomic Winner Slot Claiming**
+**Decision**: Use Redis Lua script for atomic leaderboard + winner slot operations
+
+**Problem**:
+In a multi-instance deployment, two users submitting simultaneously could both:
+1. Get added to leaderboard
+2. Both see rank 1
+3. Both claim full rewards
+
+**Solution**:
+Lua script (`claim_winner_slot.lua`) atomically:
+1. Adds user to sorted set (ZADD)
+2. Gets user's rank (ZREVRANK)
+3. Claims winner slot if eligible (SADD to winners set)
+
+```lua
+-- Atomic: only one user can claim each winner slot
+local added = redis.call('SADD', winnersKey, oderId)
+if added == 1 then
+    return {rank, 1, winnerCount}  -- Claimed slot
+end
+return {rank, 0, winnerCount}  -- Slot already taken
+```
+
+**Why Lua?**:
+- Executes atomically on Redis server
+- No network round-trips between operations
+- Prevents race conditions across multiple app instances
+- Sub-millisecond execution
+
+**Trade-off**: Logic in Lua vs. application code, but guarantees correctness
+
+### 7. **Graceful Shutdown**
+**Decision**: Implement graceful shutdown with request tracking
+
+**Rationale**:
+- Complete in-flight requests before shutdown
+- Prevent data loss during deployments
+- Allow health checks during shutdown for orchestrator probes
+
+**Implementation**:
+- `server.shutdown: graceful` in Spring Boot
+- 30-second timeout for shutdown phase
+- `GracefulShutdownFilter` tracks active requests
+- Returns 503 with `Retry-After` header for new requests during shutdown
 
 ## Scalability Considerations
 
