@@ -236,6 +236,23 @@ USER3_CORRECT=$(echo "$USER3_ANSWER" | jq -r '.isCorrect')
 USER3_REWARD=$(echo "$USER3_ANSWER" | jq -r '.rewardAmount')
 log_success "User 3: isCorrect=$USER3_CORRECT, reward=$USER3_REWARD"
 
+# User 1 - Try duplicate answer (should fail)
+log_info "User 1 (Alice) attempting to answer Question 1 again (should fail)..."
+USER1_DUPLICATE=$(curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"userId\": \"$USER1_ID\",
+        \"selectedOptionId\": \"$QUESTION1_CORRECT_OPTION\",
+        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
+    }")
+DUPLICATE_ERROR=$(echo "$USER1_DUPLICATE" | jq -r '.message // .error // empty')
+if [[ -n "$DUPLICATE_ERROR" ]]; then
+    log_success "Duplicate answer correctly rejected: $DUPLICATE_ERROR"
+else
+    log_error "Duplicate answer check failed - expected rejection!"
+    echo "$USER1_DUPLICATE" | jq '.'
+fi
+
 # User 4 - Correct answer (should be 3rd)
 sleep 0.1
 log_info "User 4 (Dave) submitting correct answer..."
@@ -482,26 +499,8 @@ GAME_LEADERBOARD=$(curl -s -X GET "$API_BASE/leaderboards/games/$GAME_ID?limit=1
 log_success "Game Leaderboard:"
 echo "$GAME_LEADERBOARD" | jq -r '.[] | "\(.rank). User \(.userId[0:8])... - Total Reward: $\(.totalReward)"'
 
-# Step 17: Try duplicate answer (should fail)
-log_section "Step 17: Testing Duplicate Answer Prevention"
-log_info "User 1 attempting to answer Question 2 again (should fail)..."
-DUPLICATE_RESPONSE=$(curl -s -X POST "$API_BASE/games/$GAME_ID/questions/submit" \
-    -H "Content-Type: application/json" \
-    -d "{
-        \"userId\": \"$USER1_ID\",
-        \"selectedOptionId\": \"$QUESTION2_CORRECT_OPTION\",
-        \"clientTimestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")\"
-    }")
-DUPLICATE_ERROR=$(echo "$DUPLICATE_RESPONSE" | jq -r '.message // .error')
-if [[ "$DUPLICATE_ERROR" == *"duplicate"* ]] || [[ "$DUPLICATE_ERROR" == *"already"* ]]; then
-    log_success "Duplicate answer correctly rejected: $DUPLICATE_ERROR"
-else
-    log_error "Duplicate answer check failed!"
-    echo "$DUPLICATE_RESPONSE" | jq '.'
-fi
-
-# Step 18: Complete the game
-log_section "Step 18: Completing Game"
+# Step 17: Complete the game
+log_section "Step 17: Completing Game"
 COMPLETE_GAME_RESPONSE=$(curl -s -X POST "$API_BASE/games/$GAME_ID/complete")
 GAME_STATUS=$(echo "$COMPLETE_GAME_RESPONSE" | jq -r '.status')
 GAME_ENDED_AT=$(echo "$COMPLETE_GAME_RESPONSE" | jq -r '.endedAt')
@@ -510,14 +509,14 @@ log_success "Game completed with status: $GAME_STATUS"
 log_info "Ended at: $GAME_ENDED_AT"
 log_info "Remaining budget: $REMAINING_BUDGET"
 
-# Step 19: Check final game leaderboard
-log_section "Step 19: Final Game Leaderboard"
+# Step 18: Check final game leaderboard
+log_section "Step 18: Final Game Leaderboard"
 FINAL_LEADERBOARD=$(curl -s -X GET "$API_BASE/leaderboards/games/$GAME_ID?limit=10")
 log_success "Final Game Leaderboard:"
 echo "$FINAL_LEADERBOARD" | jq -r '.[] | "\(.rank). User \(.userId[0:8])... - Total Reward: $\(.totalReward)"'
 
-# Step 20: Check individual user game results
-log_section "Step 20: Individual User Results"
+# Step 19: Check individual user game results
+log_section "Step 19: Individual User Results"
 
 log_info "Checking User 1 (Alice) results..."
 USER1_RESULT=$(curl -s -X GET "$API_BASE/leaderboards/users/$USER1_ID/games/$GAME_ID")
@@ -541,14 +540,14 @@ else
     log_info "User 2 result not yet finalized in Cassandra (normal - might be processed async)"
 fi
 
-# Step 21: Get game details
-log_section "Step 21: Final Game Details"
+# Step 20: Get game details
+log_section "Step 20: Final Game Details"
 GAME_DETAILS=$(curl -s -X GET "$API_BASE/games/$GAME_ID")
 log_success "Game Details:"
 echo "$GAME_DETAILS" | jq '{id, name, gameType, status, initialBudget, remainingBudget, startedAt, endedAt}'
 
-# Step 22: List all games
-log_section "Step 22: Listing All Games"
+# Step 21: List all games
+log_section "Step 21: Listing All Games"
 ALL_GAMES=$(curl -s -X GET "$API_BASE/games")
 TOTAL_GAMES=$(echo "$ALL_GAMES" | jq '. | length')
 log_success "Total games in system: $TOTAL_GAMES"

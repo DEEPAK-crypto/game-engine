@@ -116,8 +116,10 @@ class AnswerSubmissionServiceTest {
         whenever(gameRepository.findById(gameId)).thenReturn(game)
         whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
         whenever(questionRepository.findById(questionId)).thenReturn(question)
-        whenever(userQuestionAnswerRepository.findByUserIdAndGameIdAndQuestionId(request.userId, gameId, questionId))
-            .thenReturn(mock()) // Return existing answer
+        // LWT returns false when record already exists (duplicate answer)
+        whenever(userQuestionAnswerRepository.insertIfNotExists(
+            eq(request.userId), eq(gameId), eq(questionId), any(), eq(request.selectedOptionId), any(), any(), any()
+        )).thenReturn(false)
 
         // When & Then
         assertThatThrownBy {
@@ -140,20 +142,24 @@ class AnswerSubmissionServiceTest {
 
         // Mock evaluator
         val mockEvaluator: com.gameplatform.game.service.evaluation.AnswerEvaluator = mock()
-        val rewardResult = com.gameplatform.game.service.evaluation.RewardEvaluationResult(
-            shouldAwardReward = true,
-            rewardAmount = BigDecimal("100.00")
-        )
         whenever(answerEvaluatorFactory.getEvaluator(GameType.MCQ_FIFO)).thenReturn(mockEvaluator)
         whenever(mockEvaluator.isAnswerCorrect(any(), any())).thenReturn(true)
-        whenever(mockEvaluator.calculateReward(any(), any())).thenReturn(rewardResult)
+        whenever(mockEvaluator.getMaxWinners()).thenReturn(1)
+
+        // Mock atomic leaderboard claim result - first place wins
+        val claimResult = LeaderboardClaimResult(rank = 1, claimedWinnerSlot = true, currentWinnerCount = 1)
+        whenever(redisLeaderboardService.addToLeaderboardAndClaimWinnerSlot(
+            eq(gameId), eq(questionId), eq(request.userId), any(), eq(1)
+        )).thenReturn(claimResult)
 
         whenever(gameRepository.findById(gameId)).thenReturn(game)
         whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
         whenever(questionRepository.findById(questionId)).thenReturn(question)
-        whenever(userQuestionAnswerRepository.findByUserIdAndGameIdAndQuestionId(any(), any(), any())).thenReturn(null)
+        // LWT returns true for new answer
+        whenever(userQuestionAnswerRepository.insertIfNotExists(
+            eq(request.userId), eq(gameId), eq(questionId), any(), eq(request.selectedOptionId), any(), any(), any()
+        )).thenReturn(true)
         whenever(userQuestionAnswerRepository.findByUserIdAndGameId(any(), any())).thenReturn(emptyList())
-        whenever(redisLeaderboardService.getUserQuestionRank(gameId, questionId, request.userId)).thenReturn(1)
         whenever(turnRepository.save(any())).thenAnswer { it.arguments[0] }
         whenever(userQuestionAnswerRepository.save(any())).thenAnswer { it.arguments[0] }
 
@@ -168,7 +174,7 @@ class AnswerSubmissionServiceTest {
         verify(budgetService).awardToUser(gameId, request.userId, questionId, BigDecimal("100.00"))
         verify(gameMetrics).recordAnswerSubmission(true, gameId, questionId)
         verify(gameMetrics).recordReward(BigDecimal("100.00"), gameId, request.userId)
-        verify(redisLeaderboardService, times(2)).addToQuestionLeaderboard(eq(gameId), eq(questionId), eq(request.userId), any(), any())
+        verify(redisLeaderboardService).addToQuestionLeaderboard(eq(gameId), eq(questionId), eq(request.userId), any(), any())
         verify(redisLeaderboardService).updateGameLeaderboard(eq(gameId), eq(request.userId), any(), any())
     }
 
@@ -185,20 +191,24 @@ class AnswerSubmissionServiceTest {
 
         // Mock evaluator
         val mockEvaluator: com.gameplatform.game.service.evaluation.AnswerEvaluator = mock()
-        val rewardResult = com.gameplatform.game.service.evaluation.RewardEvaluationResult(
-            shouldAwardReward = false,
-            rewardAmount = BigDecimal.ZERO
-        )
         whenever(answerEvaluatorFactory.getEvaluator(GameType.MCQ_FIFO)).thenReturn(mockEvaluator)
         whenever(mockEvaluator.isAnswerCorrect(any(), any())).thenReturn(true)
-        whenever(mockEvaluator.calculateReward(any(), any())).thenReturn(rewardResult)
+        whenever(mockEvaluator.getMaxWinners()).thenReturn(1)
+
+        // Mock atomic leaderboard claim result - second place doesn't win (claimedWinnerSlot = false)
+        val claimResult = LeaderboardClaimResult(rank = 2, claimedWinnerSlot = false, currentWinnerCount = 1)
+        whenever(redisLeaderboardService.addToLeaderboardAndClaimWinnerSlot(
+            eq(gameId), eq(questionId), eq(request.userId), any(), eq(1)
+        )).thenReturn(claimResult)
 
         whenever(gameRepository.findById(gameId)).thenReturn(game)
         whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
         whenever(questionRepository.findById(questionId)).thenReturn(question)
-        whenever(userQuestionAnswerRepository.findByUserIdAndGameIdAndQuestionId(any(), any(), any())).thenReturn(null)
+        // LWT returns true for new answer
+        whenever(userQuestionAnswerRepository.insertIfNotExists(
+            eq(request.userId), eq(gameId), eq(questionId), any(), eq(request.selectedOptionId), any(), any(), any()
+        )).thenReturn(true)
         whenever(userQuestionAnswerRepository.findByUserIdAndGameId(any(), any())).thenReturn(emptyList())
-        whenever(redisLeaderboardService.getUserQuestionRank(gameId, questionId, request.userId)).thenReturn(2) // Second place
         whenever(turnRepository.save(any())).thenAnswer { it.arguments[0] }
         whenever(userQuestionAnswerRepository.save(any())).thenAnswer { it.arguments[0] }
 
@@ -213,6 +223,7 @@ class AnswerSubmissionServiceTest {
         verify(budgetService, never()).awardToUser(any(), any(), any(), any())
         verify(gameMetrics).recordAnswerSubmission(true, gameId, questionId)
         verify(gameMetrics, never()).recordReward(any(), any(), any())
+        verify(redisLeaderboardService).updateGameLeaderboard(eq(gameId), eq(request.userId), any(), any())
     }
 
     @Test
@@ -235,7 +246,10 @@ class AnswerSubmissionServiceTest {
         whenever(gameRepository.findById(gameId)).thenReturn(game)
         whenever(activeQuestionCacheService.getActiveQuestion(eq(gameId), any())).thenReturn(activeQuestionResult)
         whenever(questionRepository.findById(questionId)).thenReturn(question)
-        whenever(userQuestionAnswerRepository.findByUserIdAndGameIdAndQuestionId(any(), any(), any())).thenReturn(null)
+        // LWT returns true for new answer
+        whenever(userQuestionAnswerRepository.insertIfNotExists(
+            eq(request.userId), eq(gameId), eq(questionId), any(), eq(request.selectedOptionId), any(), any(), any()
+        )).thenReturn(true)
         whenever(turnRepository.save(any())).thenAnswer { it.arguments[0] }
         whenever(userQuestionAnswerRepository.save(any())).thenAnswer { it.arguments[0] }
 
@@ -249,7 +263,7 @@ class AnswerSubmissionServiceTest {
 
         verify(budgetService, never()).awardToUser(any(), any(), any(), any())
         verify(gameMetrics).recordAnswerSubmission(false, gameId, questionId)
-        verify(redisLeaderboardService, never()).addToQuestionLeaderboard(any(), any(), any(), any(), any())
+        verify(redisLeaderboardService, never()).addToLeaderboardAndClaimWinnerSlot(any(), any(), any(), any(), any())
     }
 
     private fun createSubmitAnswerRequest(

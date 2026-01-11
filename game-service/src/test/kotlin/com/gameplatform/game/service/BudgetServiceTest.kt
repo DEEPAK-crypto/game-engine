@@ -3,7 +3,6 @@ package com.gameplatform.game.service
 import com.gameplatform.game.domain.enums.GameStatus
 import com.gameplatform.game.domain.enums.GameType
 import com.gameplatform.game.domain.model.Game
-import com.gameplatform.game.exception.BudgetAllocationException
 import com.gameplatform.game.exception.GameNotFoundException
 import com.gameplatform.game.exception.InsufficientBudgetException
 import com.gameplatform.game.metrics.GameMetrics
@@ -45,10 +44,9 @@ class BudgetServiceTest {
         val gameId = UUID.randomUUID()
         val questionId = UUID.randomUUID()
         val amount = BigDecimal("100.00")
-        val game = createGame(gameId, remainingBudget = BigDecimal("1000.00"))
+        val newBudget = BigDecimal("900.00")
 
-        whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(gameRepository.updateRemainingBudget(gameId, BigDecimal("900.00"))).thenReturn(true)
+        whenever(gameRepository.deductBudgetAtomic(gameId, amount)).thenReturn(newBudget)
         whenever(budgetTransactionRepository.save(any())).thenAnswer { it.arguments[0] }
 
         // When
@@ -56,7 +54,7 @@ class BudgetServiceTest {
 
         // Then
         assertThat(result).isTrue()
-        verify(gameRepository).updateRemainingBudget(gameId, BigDecimal("900.00"))
+        verify(gameRepository).deductBudgetAtomic(gameId, amount)
         verify(budgetTransactionRepository).save(any())
         verify(gameMetrics).recordBudgetAllocated(amount, gameId)
     }
@@ -69,6 +67,8 @@ class BudgetServiceTest {
         val amount = BigDecimal("1500.00")
         val game = createGame(gameId, remainingBudget = BigDecimal("1000.00"))
 
+        // deductBudgetAtomic returns null when insufficient budget
+        whenever(gameRepository.deductBudgetAtomic(gameId, amount)).thenReturn(null)
         whenever(gameRepository.findById(gameId)).thenReturn(game)
 
         // When
@@ -76,7 +76,7 @@ class BudgetServiceTest {
 
         // Then
         assertThat(result).isFalse()
-        verify(gameRepository, never()).updateRemainingBudget(any(), any())
+        verify(gameRepository).deductBudgetAtomic(gameId, amount)
         verify(budgetTransactionRepository, never()).save(any())
     }
 
@@ -87,6 +87,8 @@ class BudgetServiceTest {
         val questionId = UUID.randomUUID()
         val amount = BigDecimal("100.00")
 
+        // deductBudgetAtomic returns null when game doesn't exist or budget insufficient
+        whenever(gameRepository.deductBudgetAtomic(gameId, amount)).thenReturn(null)
         whenever(gameRepository.findById(gameId)).thenReturn(null)
 
         // When & Then
@@ -96,40 +98,22 @@ class BudgetServiceTest {
     }
 
     @Test
-    fun `should throw BudgetAllocationException when update fails`() {
-        // Given
-        val gameId = UUID.randomUUID()
-        val questionId = UUID.randomUUID()
-        val amount = BigDecimal("100.00")
-        val game = createGame(gameId, remainingBudget = BigDecimal("1000.00"))
-
-        whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(gameRepository.updateRemainingBudget(gameId, BigDecimal("900.00"))).thenReturn(false)
-
-        // When & Then
-        assertThatThrownBy {
-            budgetService.allocateQuestionReward(gameId, questionId, amount)
-        }.isInstanceOf(BudgetAllocationException::class.java)
-    }
-
-    @Test
     fun `should award budget to user successfully`() {
         // Given
         val gameId = UUID.randomUUID()
         val userId = UUID.randomUUID()
         val questionId = UUID.randomUUID()
         val amount = BigDecimal("100.00")
-        val game = createGame(gameId, remainingBudget = BigDecimal("1000.00"))
+        val newBudget = BigDecimal("900.00")
 
-        whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(gameRepository.updateRemainingBudget(gameId, BigDecimal("900.00"))).thenReturn(true)
+        whenever(gameRepository.deductBudgetAtomic(gameId, amount)).thenReturn(newBudget)
         whenever(budgetTransactionRepository.save(any())).thenAnswer { it.arguments[0] }
 
         // When
         budgetService.awardToUser(gameId, userId, questionId, amount)
 
         // Then
-        verify(gameRepository).updateRemainingBudget(gameId, BigDecimal("900.00"))
+        verify(gameRepository).deductBudgetAtomic(gameId, amount)
         verify(budgetTransactionRepository).save(any())
         verify(gameMetrics).recordBudgetAwarded(amount, gameId, userId)
     }
@@ -143,6 +127,8 @@ class BudgetServiceTest {
         val amount = BigDecimal("1500.00")
         val game = createGame(gameId, remainingBudget = BigDecimal("1000.00"))
 
+        // deductBudgetAtomic returns null when insufficient budget
+        whenever(gameRepository.deductBudgetAtomic(gameId, amount)).thenReturn(null)
         whenever(gameRepository.findById(gameId)).thenReturn(game)
 
         // When & Then
@@ -159,6 +145,8 @@ class BudgetServiceTest {
         val questionId = UUID.randomUUID()
         val amount = BigDecimal("100.00")
 
+        // deductBudgetAtomic returns null when game doesn't exist or budget insufficient
+        whenever(gameRepository.deductBudgetAtomic(gameId, amount)).thenReturn(null)
         whenever(gameRepository.findById(gameId)).thenReturn(null)
 
         // When & Then
@@ -201,23 +189,22 @@ class BudgetServiceTest {
         val gameId = UUID.randomUUID()
         val questionId1 = UUID.randomUUID()
         val questionId2 = UUID.randomUUID()
-        val game = createGame(gameId, remainingBudget = BigDecimal("1000.00"))
+        val amount = BigDecimal("100.00")
 
-        whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(gameRepository.updateRemainingBudget(gameId, BigDecimal("900.00"))).thenReturn(true)
-        whenever(gameRepository.updateRemainingBudget(gameId, BigDecimal("800.00"))).thenReturn(true)
+        // First allocation returns 900, second returns 800
+        whenever(gameRepository.deductBudgetAtomic(gameId, amount))
+            .thenReturn(BigDecimal("900.00"))
+            .thenReturn(BigDecimal("800.00"))
         whenever(budgetTransactionRepository.save(any())).thenAnswer { it.arguments[0] }
 
         // When
-        val result1 = budgetService.allocateQuestionReward(gameId, questionId1, BigDecimal("100.00"))
-
-        // Update remaining budget for second allocation
-        whenever(gameRepository.findById(gameId)).thenReturn(game.copy(remainingBudget = BigDecimal("900.00")))
-        val result2 = budgetService.allocateQuestionReward(gameId, questionId2, BigDecimal("100.00"))
+        val result1 = budgetService.allocateQuestionReward(gameId, questionId1, amount)
+        val result2 = budgetService.allocateQuestionReward(gameId, questionId2, amount)
 
         // Then
         assertThat(result1).isTrue()
         assertThat(result2).isTrue()
+        verify(gameRepository, times(2)).deductBudgetAtomic(gameId, amount)
         verify(budgetTransactionRepository, times(2)).save(any())
     }
 
@@ -227,10 +214,9 @@ class BudgetServiceTest {
         val gameId = UUID.randomUUID()
         val questionId = UUID.randomUUID()
         val amount = BigDecimal("1000.00")
-        val game = createGame(gameId, remainingBudget = BigDecimal("1000.00"))
 
-        whenever(gameRepository.findById(gameId)).thenReturn(game)
-        whenever(gameRepository.updateRemainingBudget(eq(gameId), any())).thenReturn(true)
+        // Exact allocation uses entire budget, returns 0
+        whenever(gameRepository.deductBudgetAtomic(gameId, amount)).thenReturn(BigDecimal.ZERO)
         whenever(budgetTransactionRepository.save(any())).thenAnswer { it.arguments[0] }
 
         // When
@@ -238,7 +224,7 @@ class BudgetServiceTest {
 
         // Then
         assertThat(result).isTrue()
-        verify(gameRepository).updateRemainingBudget(eq(gameId), argThat { this.compareTo(BigDecimal.ZERO) == 0 })
+        verify(gameRepository).deductBudgetAtomic(gameId, amount)
     }
 
     private fun createGame(
