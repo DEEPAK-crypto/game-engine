@@ -308,4 +308,42 @@ class RedisLeaderboardServiceImpl(
         )
         redisTemplate.delete(key)
     }
+
+    override fun incrementUserTotalReward(
+        gameId: UUID,
+        userId: UUID,
+        rewardIncrement: BigDecimal,
+        timestamp: Instant
+    ): BigDecimal {
+        val totalRewardKey = getUserTotalRewardKey(gameId, userId)
+        val gameLeaderboardKey = getGameLeaderboardKey(gameId)
+
+        // Atomic increment using INCRBYFLOAT
+        // This prevents race conditions where two concurrent submissions
+        // could both read the same total and overwrite each other
+        val newTotal = redisTemplate.opsForValue().increment(
+            totalRewardKey,
+            rewardIncrement.toDouble()
+        ) ?: rewardIncrement.toDouble()
+
+        val newTotalDecimal = BigDecimal.valueOf(newTotal).setScale(2, BigDecimal.ROUND_HALF_UP)
+
+        // Update the game leaderboard with the new total
+        val score = calculateScore(newTotalDecimal, timestamp)
+        redisTemplate.opsForZSet().add(gameLeaderboardKey, userId.toString(), score)
+
+        log.debug(
+            "Atomically incremented user total reward",
+            kv("gameId", gameId),
+            kv("userId", userId),
+            kv("increment", rewardIncrement),
+            kv("newTotal", newTotalDecimal)
+        )
+
+        return newTotalDecimal
+    }
+
+    private fun getUserTotalRewardKey(gameId: UUID, userId: UUID): String {
+        return "user_total_reward:$gameId:$userId"
+    }
 }

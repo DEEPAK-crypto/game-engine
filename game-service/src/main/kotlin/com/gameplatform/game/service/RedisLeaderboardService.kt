@@ -168,4 +168,25 @@ interface RedisLeaderboardService {
      * @param questionId The question ID
      */
     fun clearQuestionWinners(gameId: UUID, questionId: UUID)
+
+    /**
+     * Atomically increments a user's total reward and updates the game leaderboard.
+     *
+     * This operation prevents race conditions where two concurrent answer submissions
+     * could both read the same total, add their rewards, and overwrite each other.
+     *
+     * Uses Redis INCRBYFLOAT for atomic increment, then updates the sorted set.
+     *
+     * @param gameId The game ID
+     * @param userId The user ID
+     * @param rewardIncrement The reward amount to add
+     * @param timestamp The timestamp for the update
+     * @return The new total reward after increment
+     */
+    fun incrementUserTotalReward(
+        gameId: UUID,
+        userId: UUID,
+        rewardIncrement: BigDecimal,
+        timestamp: Instant
+    ): BigDecimal
 }

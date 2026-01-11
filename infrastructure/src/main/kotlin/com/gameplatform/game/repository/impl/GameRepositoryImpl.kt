@@ -71,6 +71,31 @@ class GameRepositoryImpl(private val dsl: DSLContext) : GameRepository {
             .execute() > 0
     }
 
+    override fun transitionStatus(
+        id: UUID,
+        expectedStatus: GameStatus,
+        newStatus: GameStatus,
+        timestamp: Instant
+    ): Boolean {
+        // Atomic status transition with expected state check
+        // This prevents race conditions where two instances try to transition simultaneously
+        val updateStep = dsl.update(GAMES)
+            .set(GAMES.STATUS, newStatus.name)
+            .set(GAMES.UPDATED_AT, Instant.now().toLocalDateTime())
+
+        val withTimestamp = when (newStatus) {
+            GameStatus.ACTIVE -> updateStep.set(GAMES.STARTED_AT, timestamp.toLocalDateTime())
+            GameStatus.COMPLETED -> updateStep.set(GAMES.ENDED_AT, timestamp.toLocalDateTime())
+            else -> updateStep
+        }
+
+        // WHERE clause ensures only one instance can successfully transition
+        return withTimestamp
+            .where(GAMES.ID.eq(id))
+            .and(GAMES.STATUS.eq(expectedStatus.name))
+            .execute() > 0
+    }
+
     override fun updateRemainingBudget(id: UUID, newBudget: BigDecimal): Boolean {
         val updated = dsl.update(GAMES)
             .set(GAMES.REMAINING_BUDGET, newBudget)

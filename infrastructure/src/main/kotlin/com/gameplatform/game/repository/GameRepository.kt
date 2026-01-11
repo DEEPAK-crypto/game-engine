@@ -16,6 +16,26 @@ interface GameRepository {
     fun delete(id: UUID): Boolean
 
     /**
+     * Atomically transitions game status from expected state to new state.
+     *
+     * This operation is safe for concurrent access across multiple instances.
+     * The WHERE clause checks both ID and expected current status, preventing
+     * race conditions where two instances try to transition simultaneously.
+     *
+     * @param id The game ID
+     * @param expectedStatus The current status the game must be in
+     * @param newStatus The status to transition to
+     * @param timestamp The timestamp for the transition
+     * @return true if transition succeeded, false if game not found or not in expected status
+     */
+    fun transitionStatus(
+        id: UUID,
+        expectedStatus: GameStatus,
+        newStatus: GameStatus,
+        timestamp: Instant
+    ): Boolean
+
+    /**
      * Atomically deducts an amount from the game's remaining budget.
      *
      * This operation is safe for concurrent access across multiple instances.

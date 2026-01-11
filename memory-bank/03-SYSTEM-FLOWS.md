@@ -673,10 +673,12 @@ POST /api/games/{game_id}/complete
 **Scenario**: User tries to answer same question twice
 
 **Flow**:
-1. Query Cassandra: `SELECT * FROM user_question_answers WHERE ...`
-2. If found, record metric: `gameMetrics.recordDuplicateAnswer()`
+1. Cassandra LWT INSERT: `INSERT ... IF NOT EXISTS`
+2. If returns `[applied: false]`, record metric: `gameMetrics.recordDuplicateAnswer()`
 3. Throw: `DuplicateAnswerException`
 4. HTTP 409 Conflict
+
+**Race Condition Prevention**: LWT ensures atomicity across all instances. See `RACE-CONDITION-SOLUTIONS.md` for details.
 
 ---
 
@@ -685,7 +687,42 @@ POST /api/games/{game_id}/complete
 **Scenario**: Game runs out of budget
 
 **Flow**:
-1. PostgreSQL constraint: `remaining_budget >= reward`
-2. If fails, transaction rolls back
+1. Atomic UPDATE with constraint: `WHERE remaining_budget >= reward`
+2. If returns null (0 rows affected), insufficient budget
 3. User still gets recorded but with $0 reward
 4. Game can continue (future: auto-complete game)
+
+**Race Condition Prevention**: Single atomic UPDATE prevents over-allocation. See `RACE-CONDITION-SOLUTIONS.md` for details.
+
+---
+
+### Concurrent Game Start
+
+**Scenario**: Two instances try to start the same game simultaneously
+
+**Flow**:
+1. Both instances call `GameService.startGame()`
+2. Both attempt atomic transition: `UPDATE ... WHERE status = 'DRAFT'`
+3. First instance succeeds (1 row updated)
+4. Second instance fails (0 rows updated)
+5. Second instance throws `GameAlreadyStartedException`
+6. HTTP 409 Conflict
+
+**Race Condition Prevention**: Conditional UPDATE ensures only one instance succeeds. See `RACE-CONDITION-SOLUTIONS.md` for details.
+
+---
+
+## Race Condition Mitigations
+
+This system implements **6 atomic operations** to prevent race conditions in multi-instance deployments:
+
+1. **Leaderboard Winner Slot Claiming** - Redis Lua script (`claim_winner_slot.lua`)
+2. **Budget Deduction** - Atomic SQL UPDATE with WHERE clause
+3. **Duplicate Answer Prevention** - Cassandra LWT (INSERT IF NOT EXISTS)
+4. **Game Status Transitions** - Conditional UPDATE with expected status check
+5. **User Total Reward Increment** - Redis INCRBYFLOAT
+6. **Code Quality** - Fixed typo in `getUserTotalRewardKey()` parameter name
+
+**Key Principle**: Replace all read-then-write patterns with atomic database operations.
+
+**Documentation**: See `RACE-CONDITION-SOLUTIONS.md` for detailed analysis and implementation.

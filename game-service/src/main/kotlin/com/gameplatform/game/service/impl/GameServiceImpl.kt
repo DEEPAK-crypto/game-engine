@@ -102,45 +102,70 @@ class GameServiceImpl(
             kv("startAt", startAt)
         )
 
+        // First, get the game to check if it exists and get current status for error messages
         val game = gameRepository.findById(gameId)
             ?: run {
                 log.warn("Game not found when starting", kv("gameId", gameId))
                 throw GameNotFoundException(gameId)
             }
 
-        when (game.status) {
-            GameStatus.ACTIVE -> {
-                log.warn(
-                    "Attempt to start already active game",
-                    kv("gameId", gameId),
-                    kv("status", game.status)
-                )
-                throw GameAlreadyStartedException(gameId)
-            }
-            GameStatus.COMPLETED -> {
-                log.warn(
-                    "Attempt to start completed game",
-                    kv("gameId", gameId),
-                    kv("status", game.status)
-                )
-                throw GameAlreadyCompletedException(gameId)
-            }
-            GameStatus.DRAFT, GameStatus.SCHEDULED -> {
-                // Valid state to start
-            }
+        // Try atomic transition from DRAFT -> ACTIVE
+        var success = gameRepository.transitionStatus(
+            gameId,
+            expectedStatus = GameStatus.DRAFT,
+            newStatus = GameStatus.ACTIVE,
+            timestamp = startAt
+        )
+
+        // If DRAFT transition failed, try SCHEDULED -> ACTIVE
+        if (!success) {
+            success = gameRepository.transitionStatus(
+                gameId,
+                expectedStatus = GameStatus.SCHEDULED,
+                newStatus = GameStatus.ACTIVE,
+                timestamp = startAt
+            )
         }
 
-        val success = gameRepository.updateStatus(gameId, GameStatus.ACTIVE, startAt)
+        // If both transitions failed, the game was in an invalid state
         if (!success) {
-            log.error("Failed to update game status to ACTIVE", kv("gameId", gameId))
-            throw InvalidGameStateException("Failed to start game $gameId")
+            // Re-fetch to get current status for accurate error message
+            val currentGame = gameRepository.findById(gameId)
+                ?: throw GameNotFoundException(gameId)
+
+            when (currentGame.status) {
+                GameStatus.ACTIVE -> {
+                    log.warn(
+                        "Attempt to start already active game (concurrent start detected)",
+                        kv("gameId", gameId),
+                        kv("status", currentGame.status)
+                    )
+                    throw GameAlreadyStartedException(gameId)
+                }
+                GameStatus.COMPLETED -> {
+                    log.warn(
+                        "Attempt to start completed game",
+                        kv("gameId", gameId),
+                        kv("status", currentGame.status)
+                    )
+                    throw GameAlreadyCompletedException(gameId)
+                }
+                else -> {
+                    log.error(
+                        "Failed to start game - unexpected state",
+                        kv("gameId", gameId),
+                        kv("status", currentGame.status)
+                    )
+                    throw InvalidGameStateException("Failed to start game $gameId")
+                }
+            }
         }
 
         val updated = gameRepository.findById(gameId)
             ?: throw GameNotFoundException(gameId)
 
         log.info(
-            "Game started successfully",
+            "Game started successfully (atomic transition)",
             kv("gameId", gameId),
             kv("name", updated.name),
             kv("startedAt", updated.startedAt)
@@ -161,41 +186,51 @@ class GameServiceImpl(
             kv("endAt", endAt)
         )
 
+        // First, check if game exists
         val game = gameRepository.findById(gameId)
             ?: run {
                 log.warn("Game not found when completing", kv("gameId", gameId))
                 throw GameNotFoundException(gameId)
             }
 
-        if (game.status == GameStatus.COMPLETED) {
-            log.warn(
-                "Attempt to complete already completed game",
-                kv("gameId", gameId),
-                kv("status", game.status)
-            )
-            throw GameAlreadyCompletedException(gameId)
-        }
+        // Atomic transition from ACTIVE -> COMPLETED
+        val success = gameRepository.transitionStatus(
+            gameId,
+            expectedStatus = GameStatus.ACTIVE,
+            newStatus = GameStatus.COMPLETED,
+            timestamp = endAt
+        )
 
-        if (game.status != GameStatus.ACTIVE) {
-            log.warn(
-                "Attempt to complete non-active game",
-                kv("gameId", gameId),
-                kv("status", game.status)
-            )
-            throw InvalidGameStateException("Cannot complete game $gameId with status ${game.status}")
-        }
-
-        val success = gameRepository.updateStatus(gameId, GameStatus.COMPLETED, endAt)
         if (!success) {
-            log.error("Failed to update game status to COMPLETED", kv("gameId", gameId))
-            throw InvalidGameStateException("Failed to complete game $gameId")
+            // Re-fetch to get current status for accurate error message
+            val currentGame = gameRepository.findById(gameId)
+                ?: throw GameNotFoundException(gameId)
+
+            when (currentGame.status) {
+                GameStatus.COMPLETED -> {
+                    log.warn(
+                        "Attempt to complete already completed game (concurrent complete detected)",
+                        kv("gameId", gameId),
+                        kv("status", currentGame.status)
+                    )
+                    throw GameAlreadyCompletedException(gameId)
+                }
+                else -> {
+                    log.warn(
+                        "Attempt to complete non-active game",
+                        kv("gameId", gameId),
+                        kv("status", currentGame.status)
+                    )
+                    throw InvalidGameStateException("Cannot complete game $gameId with status ${currentGame.status}")
+                }
+            }
         }
 
         val updated = gameRepository.findById(gameId)
             ?: throw GameNotFoundException(gameId)
 
         log.info(
-            "Game completed successfully",
+            "Game completed successfully (atomic transition)",
             kv("gameId", gameId),
             kv("name", updated.name),
             kv("endedAt", updated.endedAt),

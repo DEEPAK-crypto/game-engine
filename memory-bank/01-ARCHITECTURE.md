@@ -354,6 +354,65 @@ IF NOT EXISTS
 
 **Trade-off**: Higher latency than simple INSERT, but guarantees correctness
 
+### 10. **Atomic Game Status Transitions**
+**Decision**: Use conditional UPDATE with expected status check for game state transitions
+
+**Problem**:
+Two instances starting the same game simultaneously could both succeed:
+```
+Instance A: SELECT status = DRAFT → UPDATE status = ACTIVE
+Instance B: SELECT status = DRAFT → UPDATE status = ACTIVE
+Result: Both succeed, no conflict detection
+```
+
+**Solution**:
+Atomic conditional UPDATE in `GameRepository.transitionStatus()`:
+```kotlin
+UPDATE games
+SET status = :newStatus,
+    started_at = :timestamp,
+    updated_at = NOW()
+WHERE id = :gameId
+  AND status = :expectedStatus  // Key: Check expected state
+```
+
+**Implementation**:
+- `GameServiceImpl.startGame()` tries DRAFT→ACTIVE, then SCHEDULED→ACTIVE
+- Only one instance succeeds (others get 0 rows updated)
+- Clear error messages for concurrent attempts (GameAlreadyStartedException)
+
+**Why it works**: Database atomically checks and updates. Second instance gets 0 rows affected.
+
+**Trade-off**: None - same performance, better correctness
+
+### 11. **Atomic User Total Reward Increment**
+**Decision**: Use Redis INCRBYFLOAT for atomic reward accumulation
+
+**Problem**:
+Two concurrent correct answers from the same user could lose updates:
+```
+Request A: Read user_total = $100 → Award $50 → Write $150
+Request B: Read user_total = $100 → Award $30 → Write $130
+Result: Only $130 stored, $50 reward lost
+```
+
+**Solution**:
+Atomic increment in `RedisLeaderboardService.incrementUserTotalReward()`:
+```kotlin
+val newTotal = redisTemplate.opsForValue().increment(
+    "user_total_reward:${gameId}:${userId}",
+    rewardIncrement.toDouble()
+)
+```
+
+**Why INCRBYFLOAT?**:
+- Atomic operation - no read-then-write race
+- Sub-millisecond performance
+- Works across all application instances
+- Simple implementation
+
+**Trade-off**: None - faster and more correct than read-then-write
+
 ## Scalability Considerations
 
 ### Horizontal Scaling
