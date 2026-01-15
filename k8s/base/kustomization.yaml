@@ -22,6 +22,10 @@ resources:
   - ingress.yaml
   - hpa.yaml
   - pdb.yaml
+  # Database StatefulSets
+  - databases/postgresql
+  - databases/cassandra
+  - databases/redis
 
 # Image configuration (can be overridden in overlays)
 images:

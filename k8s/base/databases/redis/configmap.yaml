@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: game-platform
+  labels:
+    app.kubernetes.io/name: redis
+data:
+  master.conf: |
+    # Redis Master Configuration
+    bind 0.0.0.0
+    port 6379
+
+    # Memory management
+    maxmemory 800mb
+    maxmemory-policy allkeys-lru
+
+    # Persistence (RDB snapshots)
+    save 900 1
+    save 300 10
+    save 60 10000
+
+    # AOF persistence
+    appendonly yes
+    appendfsync everysec
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+
+    # Performance
+    tcp-backlog 511
+    timeout 300
+    tcp-keepalive 60
+
+    # Logging
+    loglevel notice
+
+    # Replication
+    min-replicas-to-write 1
+    min-replicas-max-lag 10
+
+  replica.conf: |
+    # Redis Replica Configuration
+    bind 0.0.0.0
+    port 6379
+
+    # Memory management
+    maxmemory 800mb
+    maxmemory-policy allkeys-lru
+
+    # Persistence (RDB snapshots)
+    save 900 1
+    save 300 10
+    save 60 10000
+
+    # AOF persistence
+    appendonly yes
+    appendfsync everysec
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+
+    # Performance
+    tcp-backlog 511
+    timeout 300
+    tcp-keepalive 60
+
+    # Logging
+    loglevel notice
+
+    # Replication - follow the master
+    replicaof redis-0.redis-headless.game-platform.svc.cluster.local 6379
+    replica-read-only yes

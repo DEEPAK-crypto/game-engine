@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: game-platform
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: database
+spec:
+  serviceName: redis-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: database
+    spec:
+      securityContext:
+        fsGroup: 1001
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: redis
+                topologyKey: kubernetes.io/hostname
+
+      initContainers:
+        - name: init-redis
+          image: redis:7-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -ex
+              # Generate redis.conf based on pod ordinal
+              [[ $HOSTNAME =~ -([0-9]+)$ ]] || exit 1
+              ordinal=${BASH_REMATCH[1]}
+
+              if [[ $ordinal -eq 0 ]]; then
+                echo "This is the master"
+                cp /mnt/config/master.conf /data/redis.conf
+              else
+                echo "This is a replica"
+                cp /mnt/config/replica.conf /data/redis.conf
+              fi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /mnt/config
+
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - redis-server
+            - /data/redis.conf
+          ports:
+            - name: redis
+              containerPort: 6379
+            - name: sentinel
+              containerPort: 26379
+
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secrets
+                  key: password
+                  optional: true
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          volumeMounts:
+            - name: data
+              mountPath: /data
+
+          securityContext:
+            runAsUser: 1001
+            runAsNonRoot: true
+
+      volumes:
+        - name: config
+          configMap:
+            name: redis-config
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: redis
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard  # Change to your storage class
+        resources:
+          requests:
+            storage: 5Gi

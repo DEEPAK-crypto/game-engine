@@ -6,8 +6,8 @@
 |-----------|--------|-------------|
 | M1 | COMPLETE | Application Containerization |
 | M2 | COMPLETE | Kubernetes Base Deployment |
-| M3 | IN PROGRESS | Database StatefulSets |
-| M4 | PENDING | Monitoring Stack (Prometheus + Grafana) |
+| M3 | COMPLETE | Database StatefulSets |
+| M4 | IN PROGRESS | Monitoring Stack (Prometheus + Grafana) |
 | M5 | PENDING | Alerting System |
 | M6 | PENDING | Game Scheduler Service |
 | M7 | PENDING | WebSocket Real-Time Updates |
@@ -64,24 +64,25 @@
 ---
 
 ## Milestone 3: Database StatefulSets
-**Status: IN PROGRESS**
+**Status: COMPLETE**
 
 ### Deliverables
-- [ ] PostgreSQL StatefulSet with replication
-- [ ] Cassandra StatefulSet (3 nodes)
-- [ ] Redis Sentinel setup
-- [ ] PersistentVolumeClaims
-- [ ] Headless services
+- [x] PostgreSQL StatefulSet with PVC and optimized config
+- [x] Cassandra StatefulSet (3 nodes) with anti-affinity
+- [x] Redis StatefulSet with master-replica replication
+- [x] PersistentVolumeClaims for all databases
+- [x] Headless services for StatefulSet DNS
+- [x] Secrets for database credentials
 
-### Files to Create
-- `k8s/base/databases/postgresql/`
-- `k8s/base/databases/cassandra/`
-- `k8s/base/databases/redis/`
+### Files Created
+- `k8s/base/databases/postgresql/` (statefulset, service, secret, kustomization)
+- `k8s/base/databases/cassandra/` (statefulset, service, kustomization)
+- `k8s/base/databases/redis/` (statefulset, service, configmap, secret, kustomization)
 
 ---
 
 ## Milestone 4: Monitoring Stack
-**Status: PENDING**
+**Status: IN PROGRESS**
 
 ### Deliverables
 - [ ] Prometheus deployment + config
@@ -212,4 +213,9 @@
   - Created HPA with CPU/memory scaling and custom metrics ready
   - Created PDB for high availability
   - Created kustomization for overlay support
-- Started Milestone 3: Database StatefulSets
+- **COMPLETED M3**: Database StatefulSets
+  - PostgreSQL StatefulSet with optimized configuration
+  - Cassandra 3-node cluster with rack awareness
+  - Redis master-replica setup with configurable replication
+  - All databases with PVCs, secrets, and headless services
+- Started Milestone 4: Monitoring Stack
