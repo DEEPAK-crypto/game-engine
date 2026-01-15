@@ -1,0 +1,99 @@
+server:
+  port: 8081
+  shutdown: graceful
+
+spring:
+  application:
+    name: game-scheduler
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  # PostgreSQL Configuration
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/game_platform}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Redis Configuration
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+  # Quartz Scheduler Configuration
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: always
+    properties:
+      org:
+        quartz:
+          scheduler:
+            instanceName: GameScheduler
+            instanceId: AUTO
+          jobStore:
+            class: org.springframework.scheduling.quartz.LocalDataSourceJobStore
+            driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+            useProperties: true
+            misfireThreshold: 60000
+            clusterCheckinInterval: 20000
+            isClustered: true
+          threadPool:
+            class: org.quartz.simpl.SimpleThreadPool
+            threadCount: 10
+            threadPriority: 5
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+# Game Service API
+game-service:
+  url: ${GAME_SERVICE_URL:http://localhost:8080}
+
+# Scheduler Settings
+scheduler:
+  game:
+    # How often to check for games that need to start
+    check-interval-seconds: 10
+    # How far ahead to look for scheduled games
+    look-ahead-minutes: 5
+    # Notification times before game starts (in minutes)
+    notification-times:
+      - 30
+      - 10
+      - 5
+      - 1
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.gameplatform.scheduler: DEBUG
+    org.quartz: INFO

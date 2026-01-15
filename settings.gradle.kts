@@ -14,3 +14,4 @@ rootProject.name = "game-engine"
 include("core")
 include("infrastructure")
 include("game-service")
+include("game-scheduler")

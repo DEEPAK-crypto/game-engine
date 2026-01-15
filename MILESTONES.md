@@ -9,8 +9,8 @@
 | M3 | COMPLETE | Database StatefulSets |
 | M4 | COMPLETE | Monitoring Stack (Prometheus + Grafana) |
 | M5 | COMPLETE | Alerting System |
-| M6 | IN PROGRESS | Game Scheduler Service |
-| M7 | PENDING | WebSocket Real-Time Updates |
+| M6 | COMPLETE | Game Scheduler Service |
+| M7 | IN PROGRESS | WebSocket Real-Time Updates |
 | M8 | PENDING | Authentication & Rate Limiting |
 | M9 | PENDING | CI/CD Pipeline |
 | M10 | PENDING | Admin Dashboard |
@@ -113,24 +113,31 @@
 ---
 
 ## Milestone 6: Game Scheduler Service
-**Status: IN PROGRESS**
+**Status: COMPLETE**
 
 ### Deliverables
-- [ ] New game-scheduler module
-- [ ] Quartz scheduler integration
-- [ ] Auto-start/end game jobs
-- [ ] Question activation automation
-- [ ] Database schema for scheduled games
-- [ ] REST API for scheduling
+- [x] New game-scheduler Kotlin module with Spring Boot
+- [x] Quartz scheduler integration with JDBC job store
+- [x] GameStartJob, GameEndJob, QuestionActivationJob
+- [x] SchedulerService for job management
+- [x] Database migration (V006__scheduled_games.sql)
+- [x] REST API for scheduling (/api/schedules)
 
-### Files to Create
-- `game-scheduler/` module
+### Files Created
+- `game-scheduler/build.gradle.kts`
+- `game-scheduler/src/main/kotlin/.../GameSchedulerApplication.kt`
+- `game-scheduler/src/main/kotlin/.../config/` (QuartzConfig, RestTemplateConfig)
+- `game-scheduler/src/main/kotlin/.../model/` (ScheduledGame, ScheduleHistory)
+- `game-scheduler/src/main/kotlin/.../repository/` (ScheduledGameRepository, ScheduleHistoryRepository)
+- `game-scheduler/src/main/kotlin/.../job/` (GameStartJob, GameEndJob, QuestionActivationJob)
+- `game-scheduler/src/main/kotlin/.../service/` (SchedulerService, GameLifecycleService)
+- `game-scheduler/src/main/kotlin/.../controller/ScheduleController.kt`
 - `infrastructure/src/main/resources/db/migration/V006__scheduled_games.sql`
 
 ---
 
 ## Milestone 7: WebSocket Real-Time Updates
-**Status: PENDING**
+**Status: IN PROGRESS**
 
 ### Deliverables
 - [ ] STOMP WebSocket configuration
@@ -227,4 +234,10 @@
   - 15+ alert rules covering application, pods, databases, and game-specific metrics
   - Severity-based routing to different Slack channels
   - Custom notification templates
-- Started Milestone 6: Game Scheduler Service
+- **COMPLETED M6**: Game Scheduler Service
+  - New game-scheduler module with Quartz integration
+  - Auto-start/end game jobs with Quartz JDBC job store
+  - Question activation automation
+  - REST API for schedule management
+  - Database migration for scheduled_games and schedule_history tables
+- Started Milestone 7: WebSocket Real-Time Updates
