@@ -1,0 +1,303 @@
+version: '3.8'
+
+# Production-like Docker Compose for local testing
+# Simulates multi-instance deployment with load balancer
+# Usage: docker-compose -f docker-compose.prod.yml up -d --scale game-service=3
+
+services:
+  # ===========================================
+  # LOAD BALANCER
+  # ===========================================
+  nginx:
+    image: nginx:alpine
+    container_name: game-platform-lb
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./k8s/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./k8s/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - game-service
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - game-network
+
+  # ===========================================
+  # APPLICATION (Scalable)
+  # ===========================================
+  game-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-primary:5432/game_platform
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      SPRING_CASSANDRA_CONTACT_POINTS: cassandra
+      SPRING_CASSANDRA_LOCAL_DATACENTER: datacenter1
+      SPRING_CASSANDRA_KEYSPACE_NAME: game_platform
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      ENVIRONMENT: production
+      JAVA_OPTS: >-
+        -XX:+UseContainerSupport
+        -XX:MaxRAMPercentage=75.0
+        -XX:+UseG1GC
+        -Dspring.profiles.active=prod
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health/liveness"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - game-network
+
+  # ===========================================
+  # POSTGRESQL (Primary + Replica)
+  # ===========================================
+  postgres-primary:
+    image: postgres:15-alpine
+    container_name: game-platform-postgres-primary
+    environment:
+      POSTGRES_DB: game_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=1536MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "wal_level=replica"
+      - "-c"
+      - "max_wal_senders=3"
+      - "-c"
+      - "max_replication_slots=3"
+      - "-c"
+      - "hot_standby=on"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_primary_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    networks:
+      - game-network
+
+  # ===========================================
+  # CASSANDRA CLUSTER
+  # ===========================================
+  cassandra:
+    image: cassandra:4.1
+    container_name: game-platform-cassandra
+    environment:
+      CASSANDRA_CLUSTER_NAME: GamePlatformCluster
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_ENDPOINT_SNITCH: SimpleSnitch
+      MAX_HEAP_SIZE: 2G
+      HEAP_NEWSIZE: 512M
+      CASSANDRA_NUM_TOKENS: 256
+      CASSANDRA_CONCURRENT_READS: 32
+      CASSANDRA_CONCURRENT_WRITES: 128
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+      - ./infrastructure/src/main/resources/cassandra:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    networks:
+      - game-network
+
+  # ===========================================
+  # REDIS (with persistence)
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: game-platform-redis
+    command:
+      - "redis-server"
+      - "--maxmemory"
+      - "1gb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--maxclients"
+      - "10000"
+      - "--tcp-backlog"
+      - "511"
+      - "--timeout"
+      - "300"
+      - "--tcp-keepalive"
+      - "60"
+      - "--save"
+      - "900 1"
+      - "--save"
+      - "300 10"
+      - "--save"
+      - "60 10000"
+      - "--appendonly"
+      - "yes"
+      - "--appendfsync"
+      - "everysec"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1500M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - game-network
+
+  # ===========================================
+  # MONITORING STACK
+  # ===========================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: game-platform-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./k8s/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./k8s/monitoring/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - game-service
+    networks:
+      - game-network
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: game-platform-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "http://localhost:3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./k8s/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./k8s/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - game-network
+
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: game-platform-alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./k8s/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - game-network
+
+# ===========================================
+# NETWORKS
+# ===========================================
+networks:
+  game-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ===========================================
+# VOLUMES
+# ===========================================
+volumes:
+  postgres_primary_data:
+  cassandra_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:

@@ -1,0 +1,98 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: game-service
+  namespace: game-platform
+  labels:
+    app.kubernetes.io/name: game-service
+    app.kubernetes.io/component: autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: game-service
+
+  minReplicas: 3
+  maxReplicas: 10
+
+  metrics:
+    # Scale based on CPU utilization
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    # Scale based on memory utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+    # Scale based on requests per second (requires Prometheus Adapter)
+    # - type: Pods
+    #   pods:
+    #     metric:
+    #       name: http_requests_per_second
+    #     target:
+    #       type: AverageValue
+    #       averageValue: "1000"
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+      selectPolicy: Min  # Scale down slowly
+
+    scaleUp:
+      stabilizationWindowSeconds: 0  # Scale up immediately when needed
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max  # Scale up aggressively
+---
+# Custom metrics HPA (requires Prometheus Adapter)
+# Uncomment when Prometheus Adapter is installed
+#
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: game-service-custom-metrics
+#   namespace: game-platform
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     name: game-service
+#   minReplicas: 3
+#   maxReplicas: 20
+#   metrics:
+#     # Scale based on active game sessions
+#     - type: Pods
+#       pods:
+#         metric:
+#           name: game_active_sessions
+#         target:
+#           type: AverageValue
+#           averageValue: "500"
+#     # Scale based on answer submission rate
+#     - type: Pods
+#       pods:
+#         metric:
+#           name: game_answers_submitted_rate
+#         target:
+#           type: AverageValue
+#           averageValue: "100"

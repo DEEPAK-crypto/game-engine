@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+*.iml
+.vscode
+
+# Build outputs
+build/
+out/
+target/
+*/build/
+*/out/
+
+# Gradle
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Logs
+*.log
+logs/
+
+# Test results
+test-results/
+test-output/
+
+# Documentation
+*.md
+!README.md
+docs/
+memory-bank/
+
+# Local config
+*.local
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker/
+
+# Kubernetes
+k8s/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Load test results
+*.pdf
+gatling-results/
+
+# Scripts (not needed in container)
+*.sh
+
+# Admin dashboard (separate container)
+admin-dashboard/

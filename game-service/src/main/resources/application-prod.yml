@@ -1,0 +1,160 @@
+server:
+  port: 8080
+  shutdown: graceful
+  tomcat:
+    max-threads: 200
+    min-spare-threads: 20
+    accept-count: 100
+    max-connections: 10000
+    connection-timeout: 20000
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  application:
+    name: game-service
+
+  # PostgreSQL Configuration
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/game_platform}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 100
+      minimum-idle: 20
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      pool-name: GamePlatformHikariPool
+
+  # Flyway Migrations
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+
+  # Cassandra Configuration
+  cassandra:
+    contact-points: ${SPRING_CASSANDRA_CONTACT_POINTS:localhost}
+    port: ${SPRING_CASSANDRA_PORT:9042}
+    local-datacenter: ${SPRING_CASSANDRA_LOCAL_DATACENTER:datacenter1}
+    keyspace-name: ${SPRING_CASSANDRA_KEYSPACE_NAME:game_platform}
+    schema-action: none
+    field-naming-strategy: org.springframework.data.mapping.model.SnakeCaseFieldNamingStrategy
+    request:
+      timeout: 10s
+      consistency: LOCAL_QUORUM
+    connection:
+      connect-timeout: 10s
+      init-query-timeout: 10s
+    pool:
+      local:
+        size: 4
+      remote:
+        size: 2
+
+  # Redis Configuration
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 100
+          max-idle: 50
+          min-idle: 10
+          max-wait: 5000ms
+        shutdown-timeout: 5000ms
+
+  # Jackson Configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+# Actuator & Metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,redis,cassandra
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:production}
+      region: ${AWS_REGION:us-east-1}
+      pod: ${HOSTNAME:unknown}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        game.answer.submission: true
+      slo:
+        http.server.requests: 50ms,100ms,200ms,500ms,1s,2s,5s
+      percentiles:
+        http.server.requests: 0.5,0.9,0.95,0.99
+    export:
+      prometheus:
+        enabled: true
+        step: 1m
+        descriptions: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.gameplatform.game: INFO
+    org.jooq: WARN
+    org.springframework.data.cassandra: WARN
+    org.springframework.data.redis: WARN
+    org.apache.kafka: WARN
+  pattern:
+    console: '{"timestamp":"%d{yyyy-MM-dd HH:mm:ss.SSS}","level":"%p","service":"${spring.application.name}","traceId":"%X{traceId:-}","spanId":"%X{spanId:-}","logger":"%logger{36}","message":"%m"}%n'
+
+# Game Platform Configuration
+game:
+  platform:
+    # Question timing
+    default-question-duration-seconds: 30
+    min-question-duration-seconds: 10
+    max-question-duration-seconds: 120
+
+    # Leaderboard settings
+    leaderboard-top-n: 100
+    leaderboard-cache-ttl-seconds: 5
+
+    # Rate limiting
+    rate-limit:
+      enabled: true
+      answers-per-second: 10
+      requests-per-minute: 1000
+
+    # Circuit breaker
+    circuit-breaker:
+      enabled: true
+      failure-threshold: 5
+      wait-duration-seconds: 30

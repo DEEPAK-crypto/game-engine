@@ -1,0 +1,23 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: game-service
+  namespace: game-platform
+  labels:
+    app.kubernetes.io/name: game-service
+    app.kubernetes.io/component: availability
+spec:
+  # Ensure at least 2 pods are always available during disruptions
+  # (node drains, upgrades, etc.)
+  minAvailable: 2
+
+  # Alternative: allow at most 1 pod to be unavailable at a time
+  # maxUnavailable: 1
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: game-service
+
+  # Unhealthy pod eviction policy (requires Kubernetes 1.27+)
+  # Allows eviction of pods that are not ready for extended periods
+  # unhealthyPodEvictionPolicy: AlwaysAllow

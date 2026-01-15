@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: game-platform-base
+
+# Namespace for all resources
+namespace: game-platform
+
+# Labels added to all resources
+commonLabels:
+  app.kubernetes.io/part-of: game-platform
+  app.kubernetes.io/managed-by: kustomize
+
+# Resources to include
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - hpa.yaml
+  - pdb.yaml
+
+# Image configuration (can be overridden in overlays)
+images:
+  - name: game-platform/game-service
+    newName: game-platform/game-service
+    newTag: latest
+
+# ConfigMap generator (alternative to manual configmap.yaml)
+# configMapGenerator:
+#   - name: game-service-config
+#     envs:
+#       - config.env
+
+# Secret generator (alternative to manual secret.yaml)
+# secretGenerator:
+#   - name: game-service-secrets
+#     envs:
+#       - secrets.env
+#     type: Opaque
+
+# Patches can be applied here
+# patches:
+#   - path: patches/replica-count.yaml
+#   - path: patches/resource-limits.yaml
