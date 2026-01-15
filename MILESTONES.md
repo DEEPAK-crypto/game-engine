@@ -10,7 +10,7 @@
 | M4 | COMPLETE | Monitoring Stack (Prometheus + Grafana) |
 | M5 | COMPLETE | Alerting System |
 | M6 | COMPLETE | Game Scheduler Service |
-| M7 | IN PROGRESS | WebSocket Real-Time Updates |
+| M7 | COMPLETE | WebSocket Real-Time Updates |
 | M8 | PENDING | Authentication & Rate Limiting |
 | M9 | PENDING | CI/CD Pipeline |
 | M10 | PENDING | Admin Dashboard |
@@ -137,18 +137,24 @@
 ---
 
 ## Milestone 7: WebSocket Real-Time Updates
-**Status: IN PROGRESS**
+**Status: COMPLETE**
 
 ### Deliverables
-- [ ] STOMP WebSocket configuration
-- [ ] Event publisher service
-- [ ] Redis Pub/Sub for multi-pod broadcast
-- [ ] Client connection handling
-- [ ] Event types (question.activated, answer.received, etc.)
+- [x] STOMP WebSocket configuration with SockJS fallback
+- [x] Event publisher service with Redis Pub/Sub
+- [x] Redis Pub/Sub for multi-pod broadcast
+- [x] Client connection handling and session registry
+- [x] Event types (GameStarted, QuestionActivated, AnswerReceived, LeaderboardUpdate, etc.)
 
-### Files to Create
-- `game-service/src/main/kotlin/.../websocket/`
-- `game-service/src/main/kotlin/.../event/`
+### Files Created
+- `game-service/src/main/kotlin/.../websocket/WebSocketConfig.kt`
+- `game-service/src/main/kotlin/.../websocket/WebSocketSecurityConfig.kt`
+- `game-service/src/main/kotlin/.../websocket/GameWebSocketController.kt`
+- `game-service/src/main/kotlin/.../websocket/WebSocketEventListener.kt`
+- `game-service/src/main/kotlin/.../event/GameEvent.kt`
+- `game-service/src/main/kotlin/.../event/GameEventPublisher.kt`
+- `game-service/src/main/kotlin/.../event/RedisEventSubscriber.kt`
+- `game-service/src/main/kotlin/.../event/RedisEventConfig.kt`
 
 ---
 
@@ -240,4 +246,10 @@
   - Question activation automation
   - REST API for schedule management
   - Database migration for scheduled_games and schedule_history tables
-- Started Milestone 7: WebSocket Real-Time Updates
+- **COMPLETED M7**: WebSocket Real-Time Updates
+  - STOMP WebSocket configuration with SockJS fallback
+  - GameEventPublisher for broadcasting events via Redis Pub/Sub
+  - RedisEventSubscriber for receiving and distributing events to local clients
+  - PlayerSessionRegistry for tracking active sessions per game
+  - 10+ event types: GameStarted, QuestionActivated, AnswerReceived, LeaderboardUpdate, etc.
+  - WebSocket endpoint at /ws with CORS support
