@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: game-platform
+  labels:
+    app.kubernetes.io/name: grafana
+binaryData: {}
+data:
+  application.json: |
+    {{- .Files.Get "dashboards/application.json" | nindent 4 }}
+  game-metrics.json: |
+    {{- .Files.Get "dashboards/game-metrics.json" | nindent 4 }}

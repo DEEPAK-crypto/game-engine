@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - datasources.yaml
+  - dashboards-config.yaml
+
+configMapGenerator:
+  - name: grafana-dashboards
+    files:
+      - dashboards/application.json
+      - dashboards/game-metrics.json
+
+commonLabels:
+  app.kubernetes.io/part-of: game-platform
+  app.kubernetes.io/managed-by: kustomize

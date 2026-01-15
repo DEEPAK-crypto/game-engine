@@ -7,9 +7,9 @@
 | M1 | COMPLETE | Application Containerization |
 | M2 | COMPLETE | Kubernetes Base Deployment |
 | M3 | COMPLETE | Database StatefulSets |
-| M4 | IN PROGRESS | Monitoring Stack (Prometheus + Grafana) |
-| M5 | PENDING | Alerting System |
-| M6 | PENDING | Game Scheduler Service |
+| M4 | COMPLETE | Monitoring Stack (Prometheus + Grafana) |
+| M5 | COMPLETE | Alerting System |
+| M6 | IN PROGRESS | Game Scheduler Service |
 | M7 | PENDING | WebSocket Real-Time Updates |
 | M8 | PENDING | Authentication & Rate Limiting |
 | M9 | PENDING | CI/CD Pipeline |
@@ -82,39 +82,38 @@
 ---
 
 ## Milestone 4: Monitoring Stack
-**Status: IN PROGRESS**
+**Status: COMPLETE**
 
 ### Deliverables
-- [ ] Prometheus deployment + config
-- [ ] Grafana deployment
-- [ ] Application dashboard
-- [ ] Database dashboard
-- [ ] Game metrics dashboard
-- [ ] ServiceMonitor for auto-discovery
+- [x] Prometheus deployment with RBAC, PVC, scrape configs
+- [x] Grafana deployment with provisioned datasources
+- [x] Application Overview dashboard
+- [x] Game Metrics dashboard
+- [x] Kubernetes pod/service discovery
 
-### Files to Create
-- `k8s/monitoring/prometheus/`
-- `k8s/monitoring/grafana/`
+### Files Created
+- `k8s/monitoring/prometheus/` (deployment, service, config, kustomization)
+- `k8s/monitoring/grafana/` (deployment, service, datasources, dashboards)
 
 ---
 
 ## Milestone 5: Alerting System
-**Status: PENDING**
+**Status: COMPLETE**
 
 ### Deliverables
-- [ ] Alertmanager deployment
-- [ ] Alert rules (error rate, latency, pod health, etc.)
-- [ ] Slack/PagerDuty integration config
-- [ ] Notification templates
+- [x] Alertmanager deployment with Slack/PagerDuty integration
+- [x] 15+ alert rules (error rate, latency, pod health, database, game-specific)
+- [x] Slack channel routing by severity
+- [x] Notification templates
 
-### Files to Create
-- `k8s/monitoring/alertmanager/`
-- `k8s/monitoring/prometheus/alert-rules.yaml`
+### Files Created
+- `k8s/monitoring/alertmanager/` (deployment, config, kustomization)
+- `k8s/monitoring/prometheus/alert-rules.yml`
 
 ---
 
 ## Milestone 6: Game Scheduler Service
-**Status: PENDING**
+**Status: IN PROGRESS**
 
 ### Deliverables
 - [ ] New game-scheduler module
@@ -218,4 +217,14 @@
   - Cassandra 3-node cluster with rack awareness
   - Redis master-replica setup with configurable replication
   - All databases with PVCs, secrets, and headless services
-- Started Milestone 4: Monitoring Stack
+- **COMPLETED M4**: Monitoring Stack
+  - Prometheus with RBAC, PVC, and comprehensive scrape configs
+  - Grafana with provisioned datasources and dashboards
+  - Application Overview and Game Metrics dashboards
+  - Kubernetes service discovery for auto-scraping
+- **COMPLETED M5**: Alerting System
+  - Alertmanager with Slack/PagerDuty integration
+  - 15+ alert rules covering application, pods, databases, and game-specific metrics
+  - Severity-based routing to different Slack channels
+  - Custom notification templates
+- Started Milestone 6: Game Scheduler Service
