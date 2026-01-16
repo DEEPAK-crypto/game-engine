@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: game-service-config
+data:
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/game_platform"
+  SPRING_DATA_REDIS_HOST: "redis"
+  SPRING_CASSANDRA_CONTACT_POINTS: "cassandra"
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_DEFAULT: "100"
+  LOG_LEVEL: "INFO"

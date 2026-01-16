@@ -12,7 +12,7 @@
 | M6 | COMPLETE | Game Scheduler Service |
 | M7 | COMPLETE | WebSocket Real-Time Updates |
 | M8 | COMPLETE | Authentication & Rate Limiting |
-| M9 | PENDING | CI/CD Pipeline |
+| M9 | COMPLETE | CI/CD Pipeline |
 | M10 | PENDING | Admin Dashboard |
 
 ---
@@ -184,20 +184,23 @@
 ---
 
 ## Milestone 9: CI/CD Pipeline
-**Status: PENDING**
+**Status: COMPLETE**
 
 ### Deliverables
-- [ ] GitHub Actions workflow for CI
-- [ ] GitHub Actions workflow for CD
-- [ ] Environment overlays (dev, staging, prod)
-- [ ] Deployment scripts
+- [x] GitHub Actions workflow for CI (build, test, lint, security scan, Docker build)
+- [x] GitHub Actions workflow for CD (build, push, deploy with environment promotion)
+- [x] Environment overlays (dev, staging, prod) with Kustomize
+- [x] Deployment scripts (deploy.sh, rollback.sh, health-check.sh)
 
-### Files to Create
+### Files Created
 - `.github/workflows/ci.yaml`
 - `.github/workflows/cd.yaml`
-- `k8s/overlays/dev/`
-- `k8s/overlays/staging/`
-- `k8s/overlays/production/`
+- `k8s/overlays/dev/` (kustomization, namespace, deployment-patch, configmap-patch)
+- `k8s/overlays/staging/` (kustomization, namespace, deployment-patch, configmap-patch, hpa-patch)
+- `k8s/overlays/production/` (kustomization, namespace, deployment-patch, configmap-patch, hpa-patch, pdb, ingress-patch)
+- `scripts/deploy.sh`
+- `scripts/rollback.sh`
+- `scripts/health-check.sh`
 
 ---
 
@@ -269,3 +272,9 @@
   - API key authentication for service-to-service communication
   - Auth REST API: login, register, token refresh, validate
   - Security configuration with separate filter chains for API, WebSocket, actuator
+- **COMPLETED M9**: CI/CD Pipeline
+  - GitHub Actions CI workflow: build, test, lint, security scan, Docker build
+  - GitHub Actions CD workflow: build/push image, deploy to dev/staging/production
+  - Kustomize overlays for dev, staging, production environments
+  - Deployment scripts: deploy.sh, rollback.sh, health-check.sh
+  - Environment-specific configurations with appropriate scaling and resources
