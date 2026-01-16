@@ -18,6 +18,12 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-data-cassandra")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+
+    // JWT
+    implementation("io.jsonwebtoken:jjwt-api:0.12.5")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.5")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.5")
 
     // Redis connection pooling (required for Lettuce pooling)
     implementation("org.apache.commons:commons-pool2")
@@ -41,6 +47,7 @@ dependencies {
 
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.testcontainers:testcontainers:1.19.4")
     testImplementation("org.testcontainers:postgresql:1.19.4")
     testImplementation("org.testcontainers:cassandra:1.19.4")

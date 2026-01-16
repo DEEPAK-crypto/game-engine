@@ -135,6 +135,32 @@ logging:
   pattern:
     console: '{"timestamp":"%d{yyyy-MM-dd HH:mm:ss.SSS}","level":"%p","service":"${spring.application.name}","traceId":"%X{traceId:-}","spanId":"%X{spanId:-}","logger":"%logger{36}","message":"%m"}%n'
 
+# Security Configuration
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}  # REQUIRED in production - must be a secure 256+ bit key
+      expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
+      refresh-expiration-seconds: ${JWT_REFRESH_EXPIRATION_SECONDS:604800}
+      issuer: ${JWT_ISSUER:game-platform}
+    rate-limit:
+      enabled: true
+      default-limit: ${RATE_LIMIT_DEFAULT:100}
+      window-seconds: ${RATE_LIMIT_WINDOW:60}
+      authenticated-multiplier: 2.0
+      admin-multiplier: 10.0
+    api-keys:
+      - name: game-scheduler
+        key: ${SCHEDULER_API_KEY}  # REQUIRED in production
+        roles:
+          - SERVICE
+          - ADMIN
+      - name: admin-dashboard
+        key: ${ADMIN_DASHBOARD_API_KEY}  # REQUIRED in production
+        roles:
+          - SERVICE
+          - ADMIN
+
 # Game Platform Configuration
 game:
   platform:

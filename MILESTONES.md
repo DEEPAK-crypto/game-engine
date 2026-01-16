@@ -11,7 +11,7 @@
 | M5 | COMPLETE | Alerting System |
 | M6 | COMPLETE | Game Scheduler Service |
 | M7 | COMPLETE | WebSocket Real-Time Updates |
-| M8 | PENDING | Authentication & Rate Limiting |
+| M8 | COMPLETE | Authentication & Rate Limiting |
 | M9 | PENDING | CI/CD Pipeline |
 | M10 | PENDING | Admin Dashboard |
 
@@ -159,18 +159,27 @@
 ---
 
 ## Milestone 8: Authentication & Rate Limiting
-**Status: PENDING**
+**Status: COMPLETE**
 
 ### Deliverables
-- [ ] JWT authentication filter
-- [ ] Spring Security configuration
-- [ ] Rate limiting with Redis
-- [ ] User roles (ADMIN, HOST, PLAYER)
-- [ ] API key support for service-to-service
+- [x] JWT authentication filter with token validation
+- [x] Spring Security configuration with role-based access
+- [x] Rate limiting with Redis sliding window algorithm
+- [x] User roles (ADMIN, HOST, PLAYER, SERVICE)
+- [x] API key support for service-to-service communication
+- [x] Authentication REST API (login, register, refresh, validate)
 
-### Files to Create
-- `game-service/src/main/kotlin/.../security/`
-- `game-service/src/main/kotlin/.../filter/`
+### Files Created
+- `game-service/src/main/kotlin/.../security/UserRole.kt`
+- `game-service/src/main/kotlin/.../security/SecurityProperties.kt`
+- `game-service/src/main/kotlin/.../security/JwtService.kt`
+- `game-service/src/main/kotlin/.../security/GameUserDetails.kt`
+- `game-service/src/main/kotlin/.../security/JwtAuthenticationFilter.kt`
+- `game-service/src/main/kotlin/.../security/ApiKeyAuthenticationFilter.kt`
+- `game-service/src/main/kotlin/.../security/RateLimitingService.kt`
+- `game-service/src/main/kotlin/.../security/RateLimitingFilter.kt`
+- `game-service/src/main/kotlin/.../security/SecurityConfig.kt`
+- `game-service/src/main/kotlin/.../security/AuthController.kt`
 
 ---
 
@@ -253,3 +262,10 @@
   - PlayerSessionRegistry for tracking active sessions per game
   - 10+ event types: GameStarted, QuestionActivated, AnswerReceived, LeaderboardUpdate, etc.
   - WebSocket endpoint at /ws with CORS support
+- **COMPLETED M8**: Authentication & Rate Limiting
+  - JWT authentication with access and refresh tokens
+  - Spring Security with role-based access control (PLAYER, HOST, ADMIN, SERVICE)
+  - Redis-based rate limiting with sliding window algorithm
+  - API key authentication for service-to-service communication
+  - Auth REST API: login, register, token refresh, validate
+  - Security configuration with separate filter chains for API, WebSocket, actuator

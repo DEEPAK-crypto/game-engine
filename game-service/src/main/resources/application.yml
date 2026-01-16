@@ -73,6 +73,27 @@ management:
         step: 1m
         descriptions: true
 
+# Security configuration
+app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:dev-secret-key-change-in-production-at-least-256-bits}
+      expiration-seconds: 3600
+      refresh-expiration-seconds: 604800
+      issuer: game-platform
+    rate-limit:
+      enabled: true
+      default-limit: 100
+      window-seconds: 60
+      authenticated-multiplier: 2.0
+      admin-multiplier: 10.0
+    api-keys:
+      - name: game-scheduler
+        key: ${SCHEDULER_API_KEY:dev-scheduler-key}
+        roles:
+          - SERVICE
+          - ADMIN
+
 logging:
   level:
     root: INFO
