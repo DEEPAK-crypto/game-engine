@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Form focus states */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+}
+
+/* Button transitions */
+button {
+  transition: all 0.2s ease;
+}
+
+/* Option button styles */
+.option-button {
+  @apply w-full p-4 rounded-xl border-2 text-left transition-all duration-200;
+}
+
+.option-button:not(:disabled):hover {
+  @apply bg-game-hover border-primary-400 transform scale-[1.02];
+}
+
+.option-button.selected {
+  @apply bg-primary-100 border-primary-500 text-primary-700;
+}
+
+.option-button.correct {
+  @apply bg-green-100 border-game-correct text-green-700;
+}
+
+.option-button.wrong {
+  @apply bg-red-100 border-game-wrong text-red-700;
+}
+
+.option-button:disabled {
+  @apply cursor-not-allowed opacity-75;
+}
+
+/* Timer animations */
+.timer-circle {
+  transition: stroke-dashoffset 1s linear;
+}
+
+/* Leaderboard row animations */
+.leaderboard-row {
+  @apply transition-all duration-300;
+}
+
+.leaderboard-row:hover {
+  @apply bg-gray-50;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Pulse animation for waiting states */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+/* Winner celebration */
+@keyframes celebrate {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.celebrate {
+  animation: celebrate 0.5s ease-in-out 3;
+}
